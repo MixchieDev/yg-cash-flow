@@ -22,6 +22,8 @@ class OneOffItem(Base):
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("expense_categories.id"))  # Optional for expenses
+    bank_account_id = Column(Integer, ForeignKey("bank_accounts.id"))  # Optional, defaults to primary account
     
     company = relationship("Company", back_populates="one_off_items")
     category = relationship("ExpenseCategory", back_populates="one_off_items")
+    bank_account = relationship("BankAccount", back_populates="one_off_items")

@@ -30,6 +30,8 @@ class RecurringIncome(Base):
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"))  # Optional
+    bank_account_id = Column(Integer, ForeignKey("bank_accounts.id"))  # Optional, defaults to primary account
     
     company = relationship("Company", back_populates="recurring_income")
     customer = relationship("Customer", back_populates="recurring_income")
+    bank_account = relationship("BankAccount", back_populates="recurring_incomes")

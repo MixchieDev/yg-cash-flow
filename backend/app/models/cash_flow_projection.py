@@ -16,8 +16,10 @@ class CashFlowProjection(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    bank_account_id = Column(Integer, ForeignKey("bank_accounts.id"))  # Optional, for account-specific projections
     
     company = relationship("Company", back_populates="projections")
+    bank_account = relationship("BankAccount", back_populates="projections")
 
 class ProjectionItem(Base):
     """Individual items that make up a projection (for detailed breakdown)"""

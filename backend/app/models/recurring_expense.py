@@ -32,6 +32,8 @@ class RecurringExpense(Base):
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("expense_categories.id"))  # Optional
+    bank_account_id = Column(Integer, ForeignKey("bank_accounts.id"))  # Optional, defaults to primary account
     
     company = relationship("Company", back_populates="recurring_expenses")
     category = relationship("ExpenseCategory", back_populates="recurring_expenses")
+    bank_account = relationship("BankAccount", back_populates="recurring_expenses")

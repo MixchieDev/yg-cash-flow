@@ -4,7 +4,7 @@ import logging
 import traceback
 from app.core.config import settings
 from app.api import companies, users, customers, transactions, auth
-from app.api.v1 import recurring_income, recurring_expenses, projections, one_off_items, expense_categories
+from app.api.v1 import recurring_income, recurring_expenses, projections, one_off_items, expense_categories, bank_accounts
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +44,7 @@ app.include_router(recurring_expenses.router, prefix="/api/v1/recurring-expenses
 app.include_router(one_off_items.router, prefix="/api/v1/one-off-items", tags=["one-off-items"])
 app.include_router(projections.router, prefix="/api/v1/projections", tags=["projections"])
 app.include_router(expense_categories.router, prefix="/api/v1/expense-categories", tags=["expense-categories"])
+app.include_router(bank_accounts.router, prefix="/api/v1/bank-accounts", tags=["bank-accounts"])
 
 @app.get("/")
 async def root():

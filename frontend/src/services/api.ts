@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { 
   User, Company, Customer, Transaction, Expense, ExpenseCategory, Token, LoginCredentials, RegisterData,
-  RecurringIncome, RecurringExpense, OneOffItem, ProjectionRequest, ProjectionResponse, CashFlowProjection, DailyProjection
+  RecurringIncome, RecurringExpense, OneOffItem, ProjectionRequest, ProjectionResponse, CashFlowProjection, DailyProjection,
+  BankAccount
 } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -484,5 +485,35 @@ export const expenseCategoryApi = {
   }> => {
     const response = await api.get('/api/v1/expense-categories/import-template')
     return response.data
+  },
+}
+
+export const bankAccountApi = {
+  getByCompany: async (companyId: number): Promise<BankAccount[]> => {
+    const response = await api.get(`/api/v1/bank-accounts/company/${companyId}`)
+    return response.data
+  },
+
+  getById: async (id: number): Promise<BankAccount> => {
+    const response = await api.get(`/api/v1/bank-accounts/${id}`)
+    return response.data
+  },
+
+  create: async (bankAccount: Omit<BankAccount, 'id' | 'created_at' | 'updated_at'>): Promise<BankAccount> => {
+    const response = await api.post('/api/v1/bank-accounts/', bankAccount)
+    return response.data
+  },
+
+  update: async (id: number, bankAccount: Partial<BankAccount>): Promise<BankAccount> => {
+    const response = await api.put(`/api/v1/bank-accounts/${id}`, bankAccount)
+    return response.data
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/api/v1/bank-accounts/${id}`)
+  },
+
+  setDefault: async (id: number): Promise<void> => {
+    await api.put(`/api/v1/bank-accounts/${id}/set-default`)
   },
 }

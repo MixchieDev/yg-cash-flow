@@ -218,3 +218,18 @@ export interface DailyProjection {
   running_balance: number
   items: ProjectionItem[]
 }
+
+export interface BankAccount {
+  id: number
+  company_id: number
+  name: string
+  bank_name?: string
+  account_number?: string  // Last 4 digits for security
+  account_type: string  // checking, savings, credit_line, investment
+  current_balance: number
+  is_active: boolean
+  is_default: boolean
+  notes?: string
+  created_at: string
+  updated_at?: string
+}

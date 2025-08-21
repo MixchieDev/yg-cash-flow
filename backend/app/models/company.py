@@ -29,3 +29,4 @@ class Company(Base):
     recurring_expenses = relationship("RecurringExpense", back_populates="company")
     one_off_items = relationship("OneOffItem", back_populates="company")
     projections = relationship("CashFlowProjection", back_populates="company")
+    bank_accounts = relationship("BankAccount", back_populates="company")
