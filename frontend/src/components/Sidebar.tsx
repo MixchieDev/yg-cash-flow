@@ -8,13 +8,15 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ClipboardDocumentListIcon,
-  TagIcon
+  TagIcon,
+  BuildingLibraryIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
   { name: 'Companies', href: '/companies', icon: BuildingOfficeIcon },
+  { name: 'Bank Accounts', href: '/bank-accounts', icon: BuildingLibraryIcon },
   { name: 'Customers', href: '/customers', icon: UserGroupIcon },
   { name: 'Expense Categories', href: '/expense-categories', icon: TagIcon },
   { name: 'Recurring Income', href: '/recurring-income', icon: ArrowTrendingUpIcon },

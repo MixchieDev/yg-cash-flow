@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Companies from './pages/Companies'
+import BankAccounts from './pages/BankAccounts'
 import Customers from './pages/Customers'
 import ExpenseCategories from './pages/ExpenseCategories'
 import RecurringIncome from './pages/RecurringIncome'
@@ -30,6 +31,7 @@ function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Dashboard />} />
               <Route path="/companies" element={<Companies />} />
+              <Route path="/bank-accounts" element={<BankAccounts />} />
               <Route path="/customers" element={<Customers />} />
               <Route path="/expense-categories" element={<ExpenseCategories />} />
               <Route path="/recurring-income" element={<RecurringIncome />} />
