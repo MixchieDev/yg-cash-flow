@@ -412,6 +412,7 @@ export default function Companies() {
                     <option value="CNY">CNY - Chinese Yuan (¥)</option>
                     <option value="INR">INR - Indian Rupee (₹)</option>
                     <option value="BRL">BRL - Brazilian Real (R$)</option>
+                    <option value="PHP">PHP - Philippine Peso (₱)</option>
                   </select>
                   {errors.currency && (
                     <p className="mt-1 text-sm text-red-600">{errors.currency.message}</p>

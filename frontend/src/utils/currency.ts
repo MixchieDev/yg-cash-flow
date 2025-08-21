@@ -17,6 +17,7 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
   CNY: { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', locale: 'zh-CN' },
   INR: { code: 'INR', symbol: '₹', name: 'Indian Rupee', locale: 'en-IN' },
   BRL: { code: 'BRL', symbol: 'R$', name: 'Brazilian Real', locale: 'pt-BR' },
+  PHP: { code: 'PHP', symbol: '₱', name: 'Philippine Peso', locale: 'en-PH' },
 }
 
 export function formatCurrency(amount: number, currencyCode: string = 'USD'): string {
