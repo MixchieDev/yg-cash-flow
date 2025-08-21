@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
-import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, StopIcon, CalendarIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, StopIcon, CalendarIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, DocumentArrowDownIcon, AdjustmentsHorizontalIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useCompanyStore } from '../stores/companyStore'
 import { recurringIncomeApi, customerApi } from '../services/api'
 import { RecurringIncome as RecurringIncomeType, Customer, FrequencyType } from '../types'
+import { formatCurrency } from '../utils/currency'
 
 const frequencyOptions: { value: FrequencyType; label: string; description: string }[] = [
   { value: 'weekly', label: 'Weekly', description: 'Every week on the same day' },
@@ -33,6 +34,10 @@ const getErrorMessage = (error: any): string => {
 
 export default function RecurringIncome() {
   const { selectedCompany } = useCompanyStore()
+  
+  const formatAmount = (amount: number) => {
+    return formatCurrency(amount, selectedCompany?.currency || 'USD')
+  }
   const [incomePatterns, setIncomePatterns] = useState<RecurringIncomeType[]>([])
   const [filteredPatterns, setFilteredPatterns] = useState<RecurringIncomeType[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -44,6 +49,26 @@ export default function RecurringIncome() {
   const [selectedPatterns, setSelectedPatterns] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [importResults, setImportResults] = useState<any>(null)
+  const [showImportResults, setShowImportResults] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [editingCell, setEditingCell] = useState<{id: number, field: string} | null>(null)
+  const [editingValue, setEditingValue] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    customer: true,
+    name: true,
+    description: true,
+    amount: true,
+    frequency: true,
+    start_date: true,
+    end_date: false,
+    status: true,
+    notes: false
+  })
   
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Omit<RecurringIncomeType, 'id' | 'created_at' | 'updated_at'>>()
   const watchedFrequency = watch('frequency')
@@ -77,6 +102,127 @@ export default function RecurringIncome() {
 
     setFilteredPatterns(filtered)
   }, [incomePatterns, searchTerm, frequencyFilter, statusFilter])
+
+  // Close column settings when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showColumnSettings) {
+        const target = event.target as Element
+        if (!target.closest('.relative')) {
+          setShowColumnSettings(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showColumnSettings])
+
+  const toggleColumn = (columnKey: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [columnKey]: !prev[columnKey]
+    }))
+  }
+
+  const handleCellEdit = (id: number, field: string, currentValue: any) => {
+    setEditingCell({ id, field })
+    setEditingValue(String(currentValue || ''))
+  }
+
+  const handleCellSave = async () => {
+    if (!editingCell || !selectedCompany) return
+
+    try {
+      const pattern = incomePatterns.find(p => p.id === editingCell.id)
+      if (!pattern) return
+
+      let updateValue: any = editingValue
+
+      // Handle different field types
+      if (editingCell.field === 'amount' || editingCell.field === 'vat_amount') {
+        updateValue = parseFloat(editingValue) || 0
+      } else if (editingCell.field === 'day_of_month') {
+        updateValue = parseInt(editingValue) || null
+      } else if (editingCell.field === 'day_of_week') {
+        updateValue = parseInt(editingValue) || null
+      } else if (editingCell.field === 'start_date' || editingCell.field === 'end_date') {
+        updateValue = editingValue || null
+      }
+
+      const updatedPattern = await recurringIncomeApi.update(editingCell.id, {
+        [editingCell.field]: updateValue
+      })
+      
+      setIncomePatterns(patterns => 
+        patterns.map(p => p.id === editingCell.id ? updatedPattern : p)
+      )
+      
+      setEditingCell(null)
+      setEditingValue('')
+    } catch (error) {
+      console.error('Error updating pattern:', error)
+      setError('Failed to update pattern')
+    }
+  }
+
+  const handleCellCancel = () => {
+    setEditingCell(null)
+    setEditingValue('')
+  }
+
+  const getVisibleColumnCount = () => {
+    return Object.values(visibleColumns).filter(Boolean).length + 2 // +1 for checkbox, +1 for actions column
+  }
+
+  const renderEditableCell = (pattern: RecurringIncomeType, field: string, value: any, className: string = '') => {
+    const isEditing = editingCell?.id === pattern.id && editingCell?.field === field
+    
+    if (isEditing) {
+      return (
+        <div className="flex items-center space-x-2">
+          <input
+            type={field === 'amount' || field === 'vat_amount' ? 'number' : field.includes('date') ? 'date' : 'text'}
+            value={editingValue}
+            onChange={(e) => setEditingValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCellSave()
+              if (e.key === 'Escape') handleCellCancel()
+            }}
+            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            autoFocus
+          />
+          <button
+            onClick={handleCellSave}
+            className="text-green-600 hover:text-green-900"
+          >
+            <CheckIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleCellCancel}
+            className="text-red-600 hover:text-red-900"
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+    
+    return (
+      <div 
+        className={`cursor-pointer hover:bg-gray-50 px-2 py-1 rounded ${className}`}
+        onClick={() => handleCellEdit(pattern.id, field, value)}
+        title="Click to edit"
+      >
+        {field === 'amount' || field === 'vat_amount' 
+          ? formatAmount(Number(value) || 0)
+          : field.includes('date') 
+            ? value ? new Date(value).toLocaleDateString() : '-'
+            : String(value || '-')
+        }
+      </div>
+    )
+  }
 
   const fetchIncomePatterns = async () => {
     if (!selectedCompany) return
@@ -245,6 +391,99 @@ export default function RecurringIncome() {
     }
   }
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const templateData = await recurringIncomeApi.downloadTemplate()
+      
+      // Create and download the template file
+      const blob = new Blob([templateData.content], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', templateData.filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('Template download error:', error)
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to download template'
+      setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage))
+    }
+  }
+
+  const handleImport = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedCompany) return
+
+    setIsImporting(true)
+    setError(null)
+    
+    try {
+      const results = await recurringIncomeApi.importCSV(selectedCompany.id, file)
+      setImportResults(results)
+      setShowImportResults(true)
+      fetchIncomePatterns() // Refresh data
+    } catch (error: any) {
+      console.error('Import error:', error)
+      let errorMessage = 'Failed to import recurring income'
+      
+      if (error.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail
+        } else if (Array.isArray(error.response.data.detail)) {
+          // Handle validation errors
+          const errors = error.response.data.detail.map((err: any) => {
+            if (typeof err === 'string') return err
+            if (err.msg) return err.msg
+            if (err.message) return err.message
+            return JSON.stringify(err)
+          })
+          errorMessage = errors.join(', ')
+        } else {
+          errorMessage = JSON.stringify(error.response.data.detail)
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      setError(errorMessage)
+    } finally {
+      setIsImporting(false)
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleExport = async () => {
+    if (!selectedCompany) return
+
+    try {
+      const exportData = await recurringIncomeApi.exportCSV(selectedCompany.id)
+      
+      // Create and download the file
+      const blob = new Blob([exportData.content], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', exportData.filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('Export error:', error)
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to export recurring income'
+      setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage))
+    }
+  }
+
   const totalProjectedIncome = filteredPatterns
     .filter(p => p.is_active === 'active')
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
@@ -293,24 +532,91 @@ export default function RecurringIncome() {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-          <button
-            onClick={() => {
-              setEditingPattern(null)
-              reset({
-                company_id: selectedCompany.id,
-                frequency: 'monthly' as FrequencyType,
-                is_active: 'active',
-                start_date: new Date().toISOString().split('T')[0],
-                amount: 0,
-                vat_amount: 0,
-              })
-              setShowModal(true)
-            }}
-            className="inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto"
-          >
-            <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-            Add Income Pattern
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={handleDownloadTemplate}
+              className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              title="Download CSV template with sample data"
+            >
+              <DocumentArrowDownIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+              Template
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={isImporting}
+              className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+            >
+              <ArrowUpTrayIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+              {isImporting ? 'Importing...' : 'Import CSV'}
+            </button>
+            {incomePatterns.length > 0 && (
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <ArrowDownTrayIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                Export CSV
+              </button>
+            )}
+            <div className="relative">
+              <button
+                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                title="Column Settings"
+              >
+                <AdjustmentsHorizontalIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                Columns
+              </button>
+              {showColumnSettings && (
+                <div className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-sm font-medium text-gray-900 border-b">
+                      Show/Hide Columns
+                    </div>
+                    {Object.entries({
+                      customer: 'Customer',
+                      name: 'Name',
+                      description: 'Description',
+                      amount: 'Amount',
+                      frequency: 'Frequency',
+                      start_date: 'Start Date',
+                      end_date: 'End Date',
+                      status: 'Status',
+                      notes: 'Notes'
+                    }).map(([key, label]) => (
+                      <label key={key} className="flex items-center px-4 py-2 text-sm hover:bg-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns[key as keyof typeof visibleColumns]}
+                          onChange={() => toggleColumn(key as keyof typeof visibleColumns)}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setEditingPattern(null)
+                reset({
+                  company_id: selectedCompany.id,
+                  frequency: 'monthly' as FrequencyType,
+                  is_active: 'active',
+                  start_date: new Date().toISOString().split('T')[0],
+                  amount: 0,
+                  vat_amount: 0,
+                })
+                setShowModal(true)
+              }}
+              className="inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto"
+            >
+              <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
+              Add Pattern
+            </button>
+          </div>
         </div>
       </div>
 
@@ -392,7 +698,7 @@ export default function RecurringIncome() {
               <dl>
                 <dt className="text-sm font-medium text-gray-500 truncate">Total Active Projected Income</dt>
                 <dd className="text-lg font-medium text-gray-900">
-                  ${totalProjectedIncome.toFixed(2)}
+                  {formatAmount(totalProjectedIncome)}
                 </dd>
               </dl>
             </div>
@@ -459,21 +765,51 @@ export default function RecurringIncome() {
                         className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Income Pattern
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Frequency
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Schedule
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
+                    {visibleColumns.customer && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                    )}
+                    {visibleColumns.name && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                    )}
+                    {visibleColumns.description && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                    )}
+                    {visibleColumns.amount && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                    )}
+                    {visibleColumns.frequency && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Frequency
+                      </th>
+                    )}
+                    {visibleColumns.start_date && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Start Date
+                      </th>
+                    )}
+                    {visibleColumns.end_date && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        End Date
+                      </th>
+                    )}
+                    {visibleColumns.status && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    )}
+                    {visibleColumns.notes && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Notes
+                      </th>
+                    )}
                     <th className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -482,104 +818,140 @@ export default function RecurringIncome() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={getVisibleColumnCount()} className="px-6 py-4 text-center text-gray-500">
                         Loading income patterns...
                       </td>
                     </tr>
                   ) : filteredPatterns.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={getVisibleColumnCount()} className="px-6 py-4 text-center text-gray-500">
                         {incomePatterns.length === 0 ? 'No income patterns found. Set up your first recurring income!' : 'No patterns match your filters.'}
                       </td>
                     </tr>
                   ) : (
-                    filteredPatterns.map((pattern) => (
-                      <tr key={pattern.id} className={selectedPatterns.includes(pattern.id) ? 'bg-indigo-50' : ''}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={selectedPatterns.includes(pattern.id)}
-                            onChange={() => handleSelectPattern(pattern.id)}
-                            className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{pattern.name}</div>
-                          {pattern.description && (
-                            <div className="text-sm text-gray-500">{pattern.description}</div>
+                    filteredPatterns.map((pattern) => {
+                      // Get customer name for display
+                      const customer = customers.find(c => c.id === pattern.customer_id)
+                      const customerName = customer?.name || '-'
+
+                      return (
+                        <tr key={pattern.id} className={selectedPatterns.includes(pattern.id) ? 'bg-indigo-50' : ''}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={selectedPatterns.includes(pattern.id)}
+                              onChange={() => handleSelectPattern(pattern.id)}
+                              className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            />
+                          </td>
+                          {visibleColumns.customer && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {customerName}
+                            </td>
                           )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-green-600">
-                            +${(Number(pattern.amount) || 0).toFixed(2)}
-                          </div>
-                          {(Number(pattern.vat_amount) || 0) > 0 && (
-                            <div className="text-sm text-gray-500">VAT: ${(Number(pattern.vat_amount) || 0).toFixed(2)}</div>
+                          {visibleColumns.name && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {renderEditableCell(pattern, 'name', pattern.name, 'font-medium')}
+                              </div>
+                            </td>
                           )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex px-2 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {getFrequencyDescription(pattern)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div>Start: {new Date(pattern.start_date).toLocaleDateString()}</div>
-                          {pattern.end_date && (
-                            <div>End: {new Date(pattern.end_date).toLocaleDateString()}</div>
+                          {visibleColumns.description && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">
+                                {renderEditableCell(pattern, 'description', pattern.description)}
+                              </div>
+                            </td>
                           )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${getStatusColor(pattern.is_active)}`}>
-                            {pattern.is_active}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center space-x-2">
-                            {pattern.is_active === 'active' && (
+                          {visibleColumns.amount && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-green-600">
+                                {renderEditableCell(pattern, 'amount', pattern.amount, 'text-green-600')}
+                              </div>
+                              {(Number(pattern.vat_amount) || 0) > 0 && (
+                                <div className="text-sm text-gray-500">
+                                  VAT: {renderEditableCell(pattern, 'vat_amount', pattern.vat_amount)}
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.frequency && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="inline-flex px-2 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                {getFrequencyDescription(pattern)}
+                              </span>
+                            </td>
+                          )}
+                          {visibleColumns.start_date && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {renderEditableCell(pattern, 'start_date', pattern.start_date)}
+                            </td>
+                          )}
+                          {visibleColumns.end_date && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {renderEditableCell(pattern, 'end_date', pattern.end_date)}
+                            </td>
+                          )}
+                          {visibleColumns.status && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${getStatusColor(pattern.is_active)}`}>
+                                {pattern.is_active}
+                              </span>
+                            </td>
+                          )}
+                          {visibleColumns.notes && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {renderEditableCell(pattern, 'notes', pattern.notes)}
+                            </td>
+                          )}
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center space-x-2">
+                              {pattern.is_active === 'active' && (
+                                <button
+                                  onClick={() => handleStatusChange(pattern.id, 'paused')}
+                                  className="text-yellow-600 hover:text-yellow-900"
+                                  title="Pause Pattern"
+                                >
+                                  <PauseIcon className="h-4 w-4" />
+                                </button>
+                              )}
+                              {pattern.is_active === 'paused' && (
+                                <button
+                                  onClick={() => handleStatusChange(pattern.id, 'active')}
+                                  className="text-green-600 hover:text-green-900"
+                                  title="Resume Pattern"
+                                >
+                                  <PlayIcon className="h-4 w-4" />
+                                </button>
+                              )}
+                              {pattern.is_active !== 'ended' && (
+                                <button
+                                  onClick={() => handleStatusChange(pattern.id, 'ended')}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="End Pattern"
+                                >
+                                  <StopIcon className="h-4 w-4" />
+                                </button>
+                              )}
                               <button
-                                onClick={() => handleStatusChange(pattern.id, 'paused')}
-                                className="text-yellow-600 hover:text-yellow-900"
-                                title="Pause Pattern"
+                                onClick={() => handleEdit(pattern)}
+                                className="text-indigo-600 hover:text-indigo-900"
+                                title="Edit Pattern"
                               >
-                                <PauseIcon className="h-4 w-4" />
+                                <PencilIcon className="h-5 w-5" />
                               </button>
-                            )}
-                            {pattern.is_active === 'paused' && (
                               <button
-                                onClick={() => handleStatusChange(pattern.id, 'active')}
-                                className="text-green-600 hover:text-green-900"
-                                title="Resume Pattern"
-                              >
-                                <PlayIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                            {pattern.is_active !== 'ended' && (
-                              <button
-                                onClick={() => handleStatusChange(pattern.id, 'ended')}
+                                onClick={() => handleDelete(pattern.id)}
                                 className="text-red-600 hover:text-red-900"
-                                title="End Pattern"
+                                title="Delete Pattern"
                               >
-                                <StopIcon className="h-4 w-4" />
+                                <TrashIcon className="h-5 w-5" />
                               </button>
-                            )}
-                            <button
-                              onClick={() => handleEdit(pattern)}
-                              className="text-indigo-600 hover:text-indigo-900"
-                              title="Edit Pattern"
-                            >
-                              <PencilIcon className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(pattern.id)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Delete Pattern"
-                            >
-                              <TrashIcon className="h-5 w-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -795,6 +1167,78 @@ export default function RecurringIncome() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden file input for CSV import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".csv"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+
+      {/* Import results modal */}
+      {showImportResults && importResults && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center mb-4">
+                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 text-center mb-4">Import Results</h3>
+              
+              <div className="space-y-4">
+                <div className="bg-green-50 p-4 rounded-md">
+                  <p className="text-sm text-green-700">
+                    <strong>Successfully imported:</strong> {importResults.success} income patterns
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    <strong>Total processed:</strong> {importResults.total_processed} rows
+                  </p>
+                </div>
+                
+                {importResults.imported_items.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Imported patterns:</h4>
+                    <div className="max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-md">
+                      {importResults.imported_items.map((name: string, index: number) => (
+                        <div key={index} className="text-sm text-gray-600">• {name}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {importResults.errors.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-red-900 mb-2">Errors ({importResults.errors.length}):</h4>
+                    <div className="max-h-32 overflow-y-auto bg-red-50 p-3 rounded-md">
+                      {importResults.errors.map((error: string, index: number) => (
+                        <div key={index} className="text-sm text-red-700">• {error}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={() => {
+                    setShowImportResults(false)
+                    setImportResults(null)
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -272,6 +272,28 @@ export const recurringIncomeApi = {
   delete: async (id: number): Promise<void> => {
     await api.delete(`/api/v1/recurring-income/${id}`)
   },
+
+  downloadTemplate: async (): Promise<{ filename: string; content: string; instructions: any }> => {
+    const response = await api.get('/api/v1/recurring-income/import-template')
+    return response.data
+  },
+
+  importCSV: async (companyId: number, file: File): Promise<{ success: number; imported_items: string[]; errors: string[]; total_processed: number }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post(`/api/v1/recurring-income/company/${companyId}/import-csv`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  exportCSV: async (companyId: number): Promise<{ filename: string; content: string; count: number }> => {
+    const response = await api.get(`/api/v1/recurring-income/company/${companyId}/export-csv`)
+    return response.data
+  },
 }
 
 export const recurringExpenseApi = {
@@ -297,6 +319,28 @@ export const recurringExpenseApi = {
 
   delete: async (id: number): Promise<void> => {
     await api.delete(`/api/v1/recurring-expenses/${id}`)
+  },
+
+  downloadTemplate: async (): Promise<{ filename: string; content: string; instructions: any }> => {
+    const response = await api.get('/api/v1/recurring-expenses/import-template')
+    return response.data
+  },
+
+  importCSV: async (companyId: number, file: File): Promise<{ success: number; imported_items: string[]; errors: string[]; total_processed: number }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await api.post(`/api/v1/recurring-expenses/company/${companyId}/import-csv`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  exportCSV: async (companyId: number): Promise<{ filename: string; content: string; count: number }> => {
+    const response = await api.get(`/api/v1/recurring-expenses/company/${companyId}/export-csv`)
+    return response.data
   },
 }
 

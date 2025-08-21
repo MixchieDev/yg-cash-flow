@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
-import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, EyeIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, EyeIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, DocumentArrowDownIcon, AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useCompanyStore } from '../stores/companyStore'
 import { customerApi } from '../services/api'
 import { Customer } from '../types'
@@ -21,7 +21,23 @@ export default function Customers() {
   const [showImportResults, setShowImportResults] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [selectedCustomers, setSelectedCustomers] = useState<Set<number>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    name: true,
+    contact: true,
+    company: true,
+    product_type: true,
+    revenue_model: false,
+    partner: false,
+    contract_start: false,
+    payment_terms: true,
+    status: true
+  })
   
   const { register, handleSubmit, reset, formState: { errors } } = useForm<Omit<Customer, 'id' | 'created_at' | 'updated_at'>>()
 
@@ -35,6 +51,21 @@ export default function Customers() {
     }
   }, [selectedCompany])
 
+  // Close column settings when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showColumnSettings) {
+        const target = event.target as Element
+        if (!target.closest('.relative')) {
+          setShowColumnSettings(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showColumnSettings])
+
   // Filter customers based on search and status
   useEffect(() => {
     let filtered = customers
@@ -45,7 +76,11 @@ export default function Customers() {
         customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         customer.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.contact_person?.toLowerCase().includes(searchTerm.toLowerCase())
+        customer.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.product_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.revenue_model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.partner?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -57,7 +92,17 @@ export default function Customers() {
     }
 
     setFilteredCustomers(filtered)
-  }, [customers, searchTerm, statusFilter])
+    
+    // Clear selections when filter changes
+    if (selectedCustomers.size > 0) {
+      const stillVisible = Array.from(selectedCustomers).filter(id => 
+        filtered.some(customer => customer.id === id)
+      )
+      if (stillVisible.length !== selectedCustomers.size) {
+        setSelectedCustomers(new Set(stillVisible))
+      }
+    }
+  }, [customers, searchTerm, statusFilter, selectedCustomers])
 
   const fetchCustomers = async () => {
     if (!selectedCompany) return
@@ -66,6 +111,7 @@ export default function Customers() {
     try {
       const data = await customerApi.getByCompany(selectedCompany.id)
       setCustomers(data)
+      setSelectedCustomers(new Set()) // Clear selections when refreshing data
     } catch (error) {
       console.error('Error fetching customers:', error)
     } finally {
@@ -181,6 +227,57 @@ export default function Customers() {
     }
   }
 
+  const toggleColumn = (columnKey: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [columnKey]: !prev[columnKey]
+    }))
+  }
+
+  const getVisibleColumnCount = () => {
+    return Object.values(visibleColumns).filter(Boolean).length + 2 // +1 for checkbox, +1 for actions column
+  }
+
+  const handleSelectCustomer = (customerId: number) => {
+    setSelectedCustomers(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(customerId)) {
+        newSet.delete(customerId)
+      } else {
+        newSet.add(customerId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedCustomers.size === filteredCustomers.length) {
+      setSelectedCustomers(new Set())
+    } else {
+      setSelectedCustomers(new Set(filteredCustomers.map(c => c.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedCustomers.size === 0) return
+    
+    const count = selectedCustomers.size
+    if (confirm(`Are you sure you want to delete ${count} customer${count > 1 ? 's' : ''}?`)) {
+      setIsDeleting(true)
+      try {
+        const deletePromises = Array.from(selectedCustomers).map(id => customerApi.delete(id))
+        await Promise.all(deletePromises)
+        
+        setCustomers(customers.filter(c => !selectedCustomers.has(c.id)))
+        setSelectedCustomers(new Set())
+      } catch (error) {
+        console.error('Error deleting customers:', error)
+      } finally {
+        setIsDeleting(false)
+      }
+    }
+  }
+
   if (!selectedCompany) {
     return (
       <div className="text-center py-12">
@@ -203,6 +300,47 @@ export default function Customers() {
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
           <div className="flex space-x-3">
+            <div className="relative">
+              <button
+                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                title="Column Settings"
+              >
+                <AdjustmentsHorizontalIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                Columns
+              </button>
+              
+              {showColumnSettings && (
+                <div className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-sm font-medium text-gray-900 border-b">
+                      Show/Hide Columns
+                    </div>
+                    {Object.entries({
+                      name: 'Name',
+                      contact: 'Contact',
+                      company: 'Company',
+                      product_type: 'Product Type',
+                      revenue_model: 'Revenue Model',
+                      partner: 'Partner',
+                      contract_start: 'Contract Start',
+                      payment_terms: 'Payment Terms',
+                      status: 'Status'
+                    }).map(([key, label]) => (
+                      <label key={key} className="flex items-center px-4 py-2 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns[key as keyof typeof visibleColumns]}
+                          onChange={() => toggleColumn(key as keyof typeof visibleColumns)}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={handleDownloadTemplate}
               className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -243,6 +381,36 @@ export default function Customers() {
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {selectedCustomers.size > 0 && (
+        <div className="mt-6 bg-indigo-50 border border-indigo-200 p-4 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <span className="text-sm font-medium text-indigo-900">
+                {selectedCustomers.size} customer{selectedCustomers.size > 1 ? 's' : ''} selected
+              </span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setSelectedCustomers(new Set())}
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-indigo-700 hover:text-indigo-900"
+              >
+                <XMarkIcon className="h-4 w-4 mr-1" />
+                Clear Selection
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                <TrashIcon className="h-4 w-4 mr-1" />
+                {isDeleting ? 'Deleting...' : `Delete (${selectedCustomers.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search and Filter Bar */}
       <div className="mt-6 bg-white p-4 rounded-lg shadow">
         <div className="flex flex-col sm:flex-row gap-4">
@@ -255,7 +423,7 @@ export default function Customers() {
               <input
                 type="text"
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="Search customers by name, email, phone, or contact person..."
+                placeholder="Search customers by name, email, company, product type..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -297,18 +465,59 @@ export default function Customers() {
               <table className="min-w-full divide-y divide-gray-300">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
+                    <th className="relative px-6 py-3">
+                      <input
+                        type="checkbox"
+                        checked={filteredCustomers.length > 0 && selectedCustomers.size === filteredCustomers.length}
+                        onChange={handleSelectAll}
+                        className="absolute left-4 top-1/2 -mt-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Payment Terms
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
+                    {visibleColumns.name && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                    )}
+                    {visibleColumns.contact && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Contact
+                      </th>
+                    )}
+                    {visibleColumns.company && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Company
+                      </th>
+                    )}
+                    {visibleColumns.product_type && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Product Type
+                      </th>
+                    )}
+                    {visibleColumns.revenue_model && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Revenue Model
+                      </th>
+                    )}
+                    {visibleColumns.partner && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Partner
+                      </th>
+                    )}
+                    {visibleColumns.contract_start && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Contract Start
+                      </th>
+                    )}
+                    {visibleColumns.payment_terms && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Payment Terms
+                      </th>
+                    )}
+                    {visibleColumns.status && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    )}
                     <th className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -317,41 +526,84 @@ export default function Customers() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={getVisibleColumnCount()} className="px-6 py-4 text-center text-gray-500">
                         Loading customers...
                       </td>
                     </tr>
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={getVisibleColumnCount()} className="px-6 py-4 text-center text-gray-500">
                         {customers.length === 0 ? 'No customers found. Add your first customer!' : 'No customers match your search criteria.'}
                       </td>
                     </tr>
                   ) : (
                     filteredCustomers.map((customer) => (
-                    <tr key={customer.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{customer.name}</div>
-                          <div className="text-sm text-gray-500">{customer.contact_person}</div>
-                        </div>
+                    <tr key={customer.id} className={selectedCustomers.has(customer.id) ? 'bg-indigo-50' : ''}>
+                      <td className="relative px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedCustomers.has(customer.id)}
+                          onChange={() => handleSelectCustomer(customer.id)}
+                          className="absolute left-4 top-1/2 -mt-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{customer.email}</div>
-                        <div className="text-sm text-gray-500">{customer.phone}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {customer.payment_terms} days
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${
-                          customer.is_active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {customer.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
+                      {visibleColumns.name && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{customer.name}</div>
+                            <div className="text-sm text-gray-500">{customer.contact_person}</div>
+                          </div>
+                        </td>
+                      )}
+                      {visibleColumns.contact && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{customer.email}</div>
+                          <div className="text-sm text-gray-500">{customer.phone}</div>
+                        </td>
+                      )}
+                      {visibleColumns.company && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{customer.company_name || '-'}</div>
+                        </td>
+                      )}
+                      {visibleColumns.product_type && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{customer.product_type || '-'}</div>
+                        </td>
+                      )}
+                      {visibleColumns.revenue_model && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{customer.revenue_model || '-'}</div>
+                        </td>
+                      )}
+                      {visibleColumns.partner && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{customer.partner || '-'}</div>
+                        </td>
+                      )}
+                      {visibleColumns.contract_start && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {customer.contract_start ? new Date(customer.contract_start).toLocaleDateString() : '-'}
+                          </div>
+                        </td>
+                      )}
+                      {visibleColumns.payment_terms && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {customer.payment_terms} days
+                        </td>
+                      )}
+                      {visibleColumns.status && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${
+                            customer.is_active
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {customer.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center space-x-2">
                           <button
@@ -388,7 +640,7 @@ export default function Customers() {
 
       {showModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="relative top-20 mx-auto p-5 border w-[600px] shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
@@ -477,6 +729,62 @@ export default function Customers() {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                     placeholder="Any additional notes about this customer..."
                   />
+                </div>
+
+                {/* Business Information Section */}
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-md font-medium text-gray-900 mb-3">Business Information</h4>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                      <input
+                        {...register('company_name')}
+                        type="text"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="Acme Corp"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Product Type</label>
+                      <input
+                        {...register('product_type')}
+                        type="text"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="SaaS, Consulting, etc."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Revenue Model</label>
+                      <input
+                        {...register('revenue_model')}
+                        type="text"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="Subscription, One-time, etc."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Partner</label>
+                      <input
+                        {...register('partner')}
+                        type="text"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="Direct, Referral Partner, etc."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700">Contract Start Date</label>
+                    <input
+                      {...register('contract_start')}
+                      type="date"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </div>
                 </div>
 
                 <div>

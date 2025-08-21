@@ -117,6 +117,48 @@ export default function CustomerDetailsModal({ customer, onClose }: CustomerDeta
               </div>
             </div>
 
+            {/* Business Information */}
+            <div className="bg-indigo-50 p-4 rounded-lg mt-4">
+              <h4 className="text-lg font-medium text-gray-900 mb-4">Business Information</h4>
+              
+              <div className="space-y-3">
+                {customer.company_name && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Company: </span>
+                    <span className="text-sm text-gray-600">{customer.company_name}</span>
+                  </div>
+                )}
+                
+                {customer.product_type && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Product Type: </span>
+                    <span className="text-sm text-gray-600">{customer.product_type}</span>
+                  </div>
+                )}
+                
+                {customer.revenue_model && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Revenue Model: </span>
+                    <span className="text-sm text-gray-600">{customer.revenue_model}</span>
+                  </div>
+                )}
+                
+                {customer.partner && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Partner: </span>
+                    <span className="text-sm text-gray-600">{customer.partner}</span>
+                  </div>
+                )}
+                
+                {customer.contract_start && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Contract Start: </span>
+                    <span className="text-sm text-gray-600">{new Date(customer.contract_start).toLocaleDateString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Financial Summary */}
             <div className="bg-blue-50 p-4 rounded-lg mt-4">
               <h4 className="text-lg font-medium text-gray-900 mb-4">Financial Summary</h4>

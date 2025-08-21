@@ -182,7 +182,7 @@ export default function Companies() {
                       Contact Info
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      VAT Rate
+                      VAT Rate / Currency
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
@@ -229,9 +229,8 @@ export default function Companies() {
                           <div className="text-sm text-gray-500">{company.phone}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex px-2 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                            {company.vat_rate}%
-                          </span>
+                          <div className="text-sm text-gray-900">{company.vat_rate}% VAT</div>
+                          <div className="text-sm text-gray-500">{company.currency}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {selectedCompany?.id === company.id ? (
@@ -397,6 +396,28 @@ export default function Companies() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Currency</label>
+                  <select
+                    {...register('currency', { required: 'Currency is required' })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="USD">USD - US Dollar ($)</option>
+                    <option value="EUR">EUR - Euro (€)</option>
+                    <option value="GBP">GBP - British Pound (£)</option>
+                    <option value="JPY">JPY - Japanese Yen (¥)</option>
+                    <option value="CAD">CAD - Canadian Dollar (C$)</option>
+                    <option value="AUD">AUD - Australian Dollar (A$)</option>
+                    <option value="CHF">CHF - Swiss Franc (CHF)</option>
+                    <option value="CNY">CNY - Chinese Yuan (¥)</option>
+                    <option value="INR">INR - Indian Rupee (₹)</option>
+                    <option value="BRL">BRL - Brazilian Real (R$)</option>
+                  </select>
+                  {errors.currency && (
+                    <p className="mt-1 text-sm text-red-600">{errors.currency.message}</p>
+                  )}
+                </div>
+
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
@@ -490,6 +511,10 @@ export default function Companies() {
                     <div>
                       <dt className="text-sm font-medium text-gray-500">VAT Rate</dt>
                       <dd className="text-sm text-gray-900">{selectedCompanyDetails.vat_rate}%</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Currency</dt>
+                      <dd className="text-sm text-gray-900">{selectedCompanyDetails.currency}</dd>
                     </div>
                     {selectedCompanyDetails.tax_number && (
                       <div>

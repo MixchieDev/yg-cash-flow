@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCompanyStore } from '../stores/companyStore'
 import { recurringIncomeApi, recurringExpenseApi, oneOffItemApi, projectionApi } from '../services/api'
 import { RecurringIncome, RecurringExpense, OneOffItem } from '../types'
+import { formatCurrency } from '../utils/currency'
 import {
   CalendarDaysIcon,
   ArrowTrendingUpIcon,
@@ -113,11 +114,8 @@ export default function Dashboard() {
     })
   }, [recurringIncomes, recurringExpenses, oneOffItems, projectionSummary])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
+  const formatAmount = (amount: number) => {
+    return formatAmount(amount, selectedCompany?.currency || 'USD')
   }
 
   const getUpcomingItems = () => {
@@ -197,7 +195,7 @@ export default function Dashboard() {
                             {stats.activeIncomePatterns}
                           </dd>
                           <dd className="text-xs text-gray-500">
-                            ~{formatCurrency(stats.monthlyIncomeTotal)}/month
+                            ~{formatAmount(stats.monthlyIncomeTotal)}/month
                           </dd>
                         </dl>
                       </div>
@@ -220,7 +218,7 @@ export default function Dashboard() {
                             {stats.activeExpensePatterns}
                           </dd>
                           <dd className="text-xs text-gray-500">
-                            ~{formatCurrency(stats.monthlyExpenseTotal)}/month
+                            ~{formatAmount(stats.monthlyExpenseTotal)}/month
                           </dd>
                         </dl>
                       </div>
@@ -265,7 +263,7 @@ export default function Dashboard() {
                           <dd className={`text-lg font-medium ${
                             (stats.monthlyIncomeTotal - stats.monthlyExpenseTotal) >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            {formatCurrency(stats.monthlyIncomeTotal - stats.monthlyExpenseTotal)}
+                            {formatAmount(stats.monthlyIncomeTotal - stats.monthlyExpenseTotal)}
                           </dd>
                           <dd className="text-xs text-gray-500">
                             Projected average
@@ -323,7 +321,7 @@ export default function Dashboard() {
                           <span className={`text-sm font-medium ${
                             item.item_type === 'income' ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            {item.item_type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
+                            {item.item_type === 'income' ? '+' : '-'}{formatAmount(item.amount)}
                           </span>
                         </div>
                       ))}

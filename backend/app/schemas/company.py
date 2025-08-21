@@ -12,6 +12,7 @@ class CompanyBase(BaseModel):
     website: Optional[str] = None
     tax_number: Optional[str] = None
     vat_rate: Decimal = Decimal("20.0")
+    currency: str = "USD"
 
 class CompanyCreate(CompanyBase):
     pass
@@ -25,6 +26,7 @@ class CompanyUpdate(BaseModel):
     website: Optional[str] = None
     tax_number: Optional[str] = None
     vat_rate: Optional[Decimal] = None
+    currency: Optional[str] = None
 
 class Company(CompanyBase):
     id: int

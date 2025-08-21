@@ -15,6 +15,7 @@ class Company(Base):
     website = Column(String)
     tax_number = Column(String)
     vat_rate = Column(Numeric(5, 2), default=20.0)
+    currency = Column(String(3), default="USD")  # ISO 4217 currency code
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

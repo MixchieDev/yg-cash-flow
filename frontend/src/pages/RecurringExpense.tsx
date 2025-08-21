@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
-import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, StopIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, StopIcon, CurrencyDollarIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { useCompanyStore } from '../stores/companyStore'
 import { recurringExpenseApi, expenseCategoryApi } from '../services/api'
 import { RecurringExpense as RecurringExpenseType, ExpenseCategory, FrequencyType } from '../types'
+import { formatCurrency } from '../utils/currency'
 
 const frequencyOptions: { value: FrequencyType; label: string; description: string }[] = [
   { value: 'weekly', label: 'Weekly', description: 'Every week on the same day' },
@@ -33,6 +34,10 @@ const getErrorMessage = (error: any): string => {
 
 export default function RecurringExpense() {
   const { selectedCompany } = useCompanyStore()
+  
+  const formatAmount = (amount: number) => {
+    return formatCurrency(amount, selectedCompany?.currency || 'USD')
+  }
   const [expensePatterns, setExpensePatterns] = useState<RecurringExpenseType[]>([])
   const [filteredPatterns, setFilteredPatterns] = useState<RecurringExpenseType[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
@@ -44,6 +49,10 @@ export default function RecurringExpense() {
   const [selectedPatterns, setSelectedPatterns] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [importResults, setImportResults] = useState<any>(null)
+  const [showImportResults, setShowImportResults] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Omit<RecurringExpenseType, 'id' | 'created_at' | 'updated_at'>>()
   const watchedFrequency = watch('frequency')
@@ -264,6 +273,92 @@ export default function RecurringExpense() {
     }
   }
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const templateData = await recurringExpenseApi.downloadTemplate()
+      
+      // Create and download the template file
+      const blob = new Blob([templateData.content], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', templateData.filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading template:', error)
+      setError('Failed to download template')
+    }
+  }
+
+  const handleImport = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedCompany) return
+
+    setIsImporting(true)
+    setError(null)
+    
+    try {
+      const results = await recurringExpenseApi.importCSV(selectedCompany.id, file)
+      setImportResults(results)
+      setShowImportResults(true)
+      
+      // Refresh the expense patterns list
+      fetchExpensePatterns()
+    } catch (error: any) {
+      console.error('Error importing CSV:', error)
+      let errorMessage = 'Failed to import CSV file'
+      
+      if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          // Handle validation errors array
+          errorMessage = error.response.data.detail.map((err: any) => {
+            if (typeof err === 'string') return err
+            return err.msg || JSON.stringify(err)
+          }).join(', ')
+        } else if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail
+        }
+      }
+      
+      setError(errorMessage)
+    } finally {
+      setIsImporting(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleExport = async () => {
+    if (!selectedCompany) return
+
+    try {
+      const exportData = await recurringExpenseApi.exportCSV(selectedCompany.id)
+      
+      // Create and download the file
+      const blob = new Blob([exportData.content], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', exportData.filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting CSV:', error)
+      setError('Failed to export data')
+    }
+  }
+
   const totalProjectedExpenses = filteredPatterns
     .filter(p => p.is_active === 'active')
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
@@ -312,24 +407,51 @@ export default function RecurringExpense() {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-          <button
-            onClick={() => {
-              setEditingPattern(null)
-              reset({
-                company_id: selectedCompany.id,
-                frequency: 'monthly' as FrequencyType,
-                is_active: 'active',
-                start_date: new Date().toISOString().split('T')[0],
-                amount: 0,
-                vat_amount: 0,
-              })
-              setShowModal(true)
-            }}
-            className="inline-flex items-center justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:w-auto"
-          >
-            <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-            Add Expense Pattern
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={handleDownloadTemplate}
+              className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              title="Download CSV template with sample data"
+            >
+              <DocumentArrowDownIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+              Template
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={isImporting}
+              className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
+            >
+              <ArrowUpTrayIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+              {isImporting ? 'Importing...' : 'Import CSV'}
+            </button>
+            {expensePatterns.length > 0 && (
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              >
+                <ArrowDownTrayIcon className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                Export CSV
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setEditingPattern(null)
+                reset({
+                  company_id: selectedCompany.id,
+                  frequency: 'monthly' as FrequencyType,
+                  is_active: 'active',
+                  start_date: new Date().toISOString().split('T')[0],
+                  amount: 0,
+                  vat_amount: 0,
+                })
+                setShowModal(true)
+              }}
+              className="inline-flex items-center justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:w-auto"
+            >
+              <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
+              Add Expense Pattern
+            </button>
+          </div>
         </div>
       </div>
 
@@ -411,7 +533,7 @@ export default function RecurringExpense() {
               <dl>
                 <dt className="text-sm font-medium text-gray-500 truncate">Total Active Projected Expenses</dt>
                 <dd className="text-lg font-medium text-gray-900">
-                  ${totalProjectedExpenses.toFixed(2)}
+                  {formatAmount(totalProjectedExpenses)}
                 </dd>
               </dl>
             </div>
@@ -533,10 +655,10 @@ export default function RecurringExpense() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-red-600">
-                            -${(Number(pattern.amount) || 0).toFixed(2)}
+                            -{formatAmount(Number(pattern.amount) || 0)}
                           </div>
                           {(Number(pattern.vat_amount) || 0) > 0 && (
-                            <div className="text-sm text-gray-500">VAT: ${(Number(pattern.vat_amount) || 0).toFixed(2)}</div>
+                            <div className="text-sm text-gray-500">VAT: {formatAmount(Number(pattern.vat_amount) || 0)}</div>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -837,6 +959,74 @@ export default function RecurringExpense() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+      />
+
+      {/* Import Results Modal */}
+      {showImportResults && importResults && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center mb-4">
+                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                  <DocumentArrowDownIcon className="h-6 w-6 text-green-600" aria-hidden="true" />
+                </div>
+              </div>
+              
+              <h3 className="text-lg font-medium text-gray-900 text-center mb-4">Import Results</h3>
+              
+              <div className="space-y-4">
+                <div className="bg-green-50 p-4 rounded-md">
+                  <p className="text-sm text-green-700">
+                    <strong>Successfully imported:</strong> {importResults.success} expense patterns
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    <strong>Total processed:</strong> {importResults.total_processed} rows
+                  </p>
+                </div>
+                
+                {importResults.imported_items.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Imported patterns:</h4>
+                    <div className="max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-md">
+                      {importResults.imported_items.map((name: string, index: number) => (
+                        <div key={index} className="text-sm text-gray-600">• {name}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {importResults.errors.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-red-900 mb-2">Errors ({importResults.errors.length}):</h4>
+                    <div className="max-h-32 overflow-y-auto bg-red-50 p-3 rounded-md">
+                      {importResults.errors.map((error: string, index: number) => (
+                        <div key={index} className="text-sm text-red-700">• {error}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setShowImportResults(false)}
+                  className="inline-flex justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ export interface Company {
   website?: string
   tax_number?: string
   vat_rate: number
+  currency: string
   owner_id: number
   created_at: string
   updated_at?: string
@@ -37,6 +38,11 @@ export interface Customer {
   company_id: number
   created_at: string
   updated_at?: string
+  company_name?: string
+  product_type?: string
+  revenue_model?: string
+  partner?: string
+  contract_start?: string
 }
 
 export interface OneOffItem {

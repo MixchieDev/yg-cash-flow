@@ -14,6 +14,7 @@ import {
 import { useCompanyStore } from '../stores/companyStore'
 import { projectionApi } from '../services/api'
 import { ProjectionRequest } from '../types'
+import { formatCurrency } from '../utils/currency'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -68,6 +69,10 @@ const getErrorMessage = (error: any): string => {
 
 export default function Projections() {
   const { selectedCompany } = useCompanyStore()
+  
+  const formatAmount = (amount: number) => {
+    return formatCurrency(amount, selectedCompany?.currency || 'USD')
+  }
   const [currentView, setCurrentView] = useState<ViewType>('monthly')
   const [projectionData, setProjectionData] = useState<ProjectionSummaryResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -160,12 +165,6 @@ export default function Projections() {
     { value: 'yearly', label: 'Yearly', description: 'Year-by-year view' }
   ]
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
-  }
 
   const formatPeriod = (period: string, view: ViewType) => {
     if (view === 'daily') {
@@ -289,13 +288,13 @@ export default function Projections() {
       const netFlow = totalIncome - totalExpenses
       const finalBalance = projectionData.summary[projectionData.summary.length - 1]?.running_balance || 0
       
-      pdf.text(`Total Projected Income: ${formatCurrency(totalIncome)}`, 20, yPosition)
+      pdf.text(`Total Projected Income: ${formatAmount(totalIncome)}`, 20, yPosition)
       yPosition += 7
-      pdf.text(`Total Projected Expenses: ${formatCurrency(totalExpenses)}`, 20, yPosition)
+      pdf.text(`Total Projected Expenses: ${formatAmount(totalExpenses)}`, 20, yPosition)
       yPosition += 7
-      pdf.text(`Net Projected Flow: ${formatCurrency(netFlow)}`, 20, yPosition)
+      pdf.text(`Net Projected Flow: ${formatAmount(netFlow)}`, 20, yPosition)
       yPosition += 7
-      pdf.text(`Final Balance: ${formatCurrency(finalBalance)}`, 20, yPosition)
+      pdf.text(`Final Balance: ${formatAmount(finalBalance)}`, 20, yPosition)
       yPosition += 15
       
       // Capture the chart
@@ -355,10 +354,10 @@ export default function Projections() {
         xPosition = 20
         const rowData = [
           formatPeriod(item.period, currentView),
-          formatCurrency(item.income),
-          formatCurrency(item.expenses),
-          formatCurrency(item.net_flow),
-          formatCurrency(item.running_balance)
+          formatAmount(item.income),
+          formatAmount(item.expenses),
+          formatAmount(item.net_flow),
+          formatAmount(item.running_balance)
         ]
         
         // Alternate row colors
@@ -442,7 +441,7 @@ export default function Projections() {
         callbacks: {
           label: function(context: any) {
             const value = context.parsed.y
-            return `${context.dataset.label}: ${formatCurrency(value)}`
+            return `${context.dataset.label}: ${formatAmount(value)}`
           }
         }
       }
@@ -452,7 +451,7 @@ export default function Projections() {
         beginAtZero: false,
         ticks: {
           callback: function(value: any) {
-            return formatCurrency(value)
+            return formatAmount(value)
           }
         }
       }
@@ -621,7 +620,7 @@ export default function Projections() {
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 truncate">Total Projected Income</dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      {formatCurrency(projectionData.summary.reduce((sum, item) => sum + item.income, 0))}
+                      {formatAmount(projectionData.summary.reduce((sum, item) => sum + item.income, 0))}
                     </dd>
                   </dl>
                 </div>
@@ -639,7 +638,7 @@ export default function Projections() {
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 truncate">Total Projected Expenses</dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      {formatCurrency(projectionData.summary.reduce((sum, item) => sum + item.expenses, 0))}
+                      {formatAmount(projectionData.summary.reduce((sum, item) => sum + item.expenses, 0))}
                     </dd>
                   </dl>
                 </div>
@@ -657,7 +656,7 @@ export default function Projections() {
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 truncate">Net Projected Flow</dt>
                     <dd className={`text-lg font-medium ${getNetFlowColor(projectionData.summary.reduce((sum, item) => sum + item.net_flow, 0))}`}>
-                      {formatCurrency(projectionData.summary.reduce((sum, item) => sum + item.net_flow, 0))}
+                      {formatAmount(projectionData.summary.reduce((sum, item) => sum + item.net_flow, 0))}
                     </dd>
                   </dl>
                 </div>
@@ -675,7 +674,7 @@ export default function Projections() {
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 truncate">Final Balance</dt>
                     <dd className={`text-lg font-medium ${getBalanceColor(projectionData.summary[projectionData.summary.length - 1]?.running_balance || 0)}`}>
-                      {formatCurrency(projectionData.summary[projectionData.summary.length - 1]?.running_balance || 0)}
+                      {formatAmount(projectionData.summary[projectionData.summary.length - 1]?.running_balance || 0)}
                     </dd>
                   </dl>
                 </div>
@@ -733,16 +732,16 @@ export default function Projections() {
                           {formatPeriod(item.period, currentView)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                          +{formatCurrency(item.income)}
+                          +{formatAmount(item.income)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                          -{formatCurrency(item.expenses)}
+                          -{formatAmount(item.expenses)}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${getNetFlowColor(item.net_flow)}`}>
-                          {item.net_flow >= 0 ? '+' : ''}{formatCurrency(item.net_flow)}
+                          {item.net_flow >= 0 ? '+' : ''}{formatAmount(item.net_flow)}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${getBalanceColor(item.running_balance)}`}>
-                          {formatCurrency(item.running_balance)}
+                          {formatAmount(item.running_balance)}
                           {item.running_balance < 0 && (
                             <ExclamationTriangleIcon className="inline ml-1 h-4 w-4 text-red-500" />
                           )}

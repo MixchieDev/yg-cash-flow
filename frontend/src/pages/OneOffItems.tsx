@@ -4,6 +4,7 @@ import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIc
 import { useCompanyStore } from '../stores/companyStore'
 import { oneOffItemApi, expenseCategoryApi } from '../services/api'
 import { OneOffItem, ExpenseCategory } from '../types'
+import { formatCurrency } from '../utils/currency'
 
 const itemTypeOptions = [
   { value: 'income', label: 'Income', description: 'Money coming in' },
@@ -28,6 +29,10 @@ const getErrorMessage = (error: any): string => {
 
 export default function OneOffItems() {
   const { selectedCompany } = useCompanyStore()
+  
+  const formatAmount = (amount: number) => {
+    return formatCurrency(amount, selectedCompany?.currency || 'USD')
+  }
   const [items, setItems] = useState<OneOffItem[]>([])
   const [filteredItems, setFilteredItems] = useState<OneOffItem[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
@@ -202,12 +207,6 @@ export default function OneOffItems() {
     )
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
-  }
 
   const getStatusColor = (status: string) => {
     const option = statusOptions.find(opt => opt.value === status)
@@ -435,7 +434,7 @@ export default function OneOffItems() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <span className={item.item_type === 'income' ? 'text-green-600' : 'text-red-600'}>
-                            {item.item_type === 'income' ? '+' : '-'}{formatCurrency(Number(item.amount) || 0)}
+                            {item.item_type === 'income' ? '+' : '-'}{formatAmount(Number(item.amount) || 0)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
