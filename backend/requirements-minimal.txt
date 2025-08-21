@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+python-jose[cryptography]
+python-multipart
+passlib[bcrypt]
+python-dateutil
