@@ -115,7 +115,7 @@ export default function Dashboard() {
   }, [recurringIncomes, recurringExpenses, oneOffItems, projectionSummary])
 
   const formatAmount = (amount: number) => {
-    return formatAmount(amount, selectedCompany?.currency || 'USD')
+    return formatCurrency(amount, selectedCompany?.currency || 'USD')
   }
 
   const getUpcomingItems = () => {
