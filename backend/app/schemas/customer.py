@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 class CustomerBase(BaseModel):
     name: str
@@ -11,6 +11,13 @@ class CustomerBase(BaseModel):
     payment_terms: int = 30
     is_active: bool = True
     notes: Optional[str] = None
+    
+    # New business fields
+    company_name: Optional[str] = None
+    product_type: Optional[str] = None
+    revenue_model: Optional[str] = None
+    partner: Optional[str] = None
+    contract_start: Optional[date] = None
 
 class CustomerCreate(CustomerBase):
     company_id: int
@@ -24,6 +31,13 @@ class CustomerUpdate(BaseModel):
     payment_terms: Optional[int] = None
     is_active: Optional[bool] = None
     notes: Optional[str] = None
+    
+    # New business fields
+    company_name: Optional[str] = None
+    product_type: Optional[str] = None
+    revenue_model: Optional[str] = None
+    partner: Optional[str] = None
+    contract_start: Optional[date] = None
 
 class Customer(CustomerBase):
     id: int

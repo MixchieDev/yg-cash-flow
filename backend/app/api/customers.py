@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 import csv
 import io
+from datetime import datetime
 from app.core.database import get_db
 from app.core.auth import get_current_active_user
 from app.schemas.customer import Customer, CustomerCreate, CustomerUpdate
@@ -20,6 +21,23 @@ def verify_company_ownership(db: Session, company_id: int, user_id: int):
     if not company:
         raise HTTPException(status_code=403, detail="Not authorized to access this company")
     return company
+
+def parse_date(date_str: str):
+    """Parse date string in various formats"""
+    if not date_str:
+        return None
+    
+    # Try common date formats
+    date_formats = ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d']
+    
+    for fmt in date_formats:
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+    
+    # If no format works, raise an error
+    raise ValueError(f"Invalid date format: {date_str}. Expected format: YYYY-MM-DD")
 
 @router.post("/", response_model=Customer)
 def create_customer(
@@ -54,7 +72,7 @@ def get_import_template(
     
     # Create CSV template with headers and sample data
     output = io.StringIO()
-    fieldnames = ['name', 'email', 'phone', 'address', 'contact_person', 'payment_terms', 'is_active', 'notes']
+    fieldnames = ['name', 'email', 'phone', 'address', 'contact_person', 'payment_terms', 'is_active', 'notes', 'company_name', 'product_type', 'revenue_model', 'partner', 'contract_start']
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     
     writer.writeheader()
@@ -68,7 +86,12 @@ def get_import_template(
             'contact_person': 'John Doe',
             'payment_terms': 30,
             'is_active': 'true',
-            'notes': 'Sample customer data'
+            'notes': 'Sample customer data',
+            'company_name': 'Acme Corp',
+            'product_type': 'SaaS',
+            'revenue_model': 'Subscription',
+            'partner': 'Direct',
+            'contract_start': '2024-01-15'
         },
         {
             'name': 'Example Customer 2',
@@ -78,7 +101,12 @@ def get_import_template(
             'contact_person': 'Jane Smith',
             'payment_terms': 14,
             'is_active': 'true',
-            'notes': 'Another sample customer'
+            'notes': 'Another sample customer',
+            'company_name': 'TechStart LLC',
+            'product_type': 'Consulting',
+            'revenue_model': 'Project-based',
+            'partner': 'Referral Partner',
+            'contract_start': '2024-03-01'
         }
     ]
     
@@ -99,7 +127,12 @@ def get_import_template(
             "contact_person": "Primary contact person (optional)",
             "payment_terms": "Payment terms in days (default: 30)",
             "is_active": "Customer status: true/false, 1/0, yes/no, active/inactive (default: true)",
-            "notes": "Additional notes (optional)"
+            "notes": "Additional notes (optional)",
+            "company_name": "Customer company name (optional)",
+            "product_type": "Type of product/service (optional, e.g., SaaS, Consulting, Hardware)",
+            "revenue_model": "Revenue model (optional, e.g., Subscription, One-time, Project-based)",
+            "partner": "Partner/channel info (optional, e.g., Direct, Referral Partner, Reseller)",
+            "contract_start": "Contract start date (optional, format: YYYY-MM-DD)"
         }
     }
 
@@ -188,7 +221,14 @@ def import_customers_csv(
                     'payment_terms': int(row.get('payment_terms', 30)),
                     'is_active': row.get('is_active', 'true').lower() in ('true', '1', 'yes', 'active'),
                     'notes': row.get('notes', '').strip() or None,
-                    'company_id': company_id
+                    'company_id': company_id,
+                    
+                    # New business fields
+                    'company_name': row.get('company_name', '').strip() or None,
+                    'product_type': row.get('product_type', '').strip() or None,
+                    'revenue_model': row.get('revenue_model', '').strip() or None,
+                    'partner': row.get('partner', '').strip() or None,
+                    'contract_start': parse_date(row.get('contract_start', '').strip()) if row.get('contract_start', '').strip() else None
                 }
                 
                 # Validate required fields
@@ -236,7 +276,7 @@ def export_customers_csv(
     
     # Create CSV content
     output = io.StringIO()
-    fieldnames = ['name', 'email', 'phone', 'address', 'contact_person', 'payment_terms', 'is_active', 'notes']
+    fieldnames = ['name', 'email', 'phone', 'address', 'contact_person', 'payment_terms', 'is_active', 'notes', 'company_name', 'product_type', 'revenue_model', 'partner', 'contract_start']
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     
     writer.writeheader()
@@ -249,7 +289,12 @@ def export_customers_csv(
             'contact_person': customer.contact_person or '',
             'payment_terms': customer.payment_terms,
             'is_active': customer.is_active,
-            'notes': customer.notes or ''
+            'notes': customer.notes or '',
+            'company_name': customer.company_name or '',
+            'product_type': customer.product_type or '',
+            'revenue_model': customer.revenue_model or '',
+            'partner': customer.partner or '',
+            'contract_start': customer.contract_start.strftime('%Y-%m-%d') if customer.contract_start else ''
         })
     
     csv_content = output.getvalue()
