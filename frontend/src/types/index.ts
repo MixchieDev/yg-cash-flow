@@ -59,6 +59,7 @@ export interface OneOffItem {
   notes?: string
   company_id: number
   category_id?: number
+  bank_account_id?: number
   created_at: string
   updated_at?: string
 }
@@ -138,6 +139,7 @@ export interface RecurringIncome {
   notes?: string
   company_id: number
   customer_id?: number
+  bank_account_id?: number
   created_at: string
   updated_at?: string
 }
@@ -159,6 +161,7 @@ export interface RecurringExpense {
   notes?: string
   company_id: number
   category_id?: number
+  bank_account_id?: number
   created_at: string
   updated_at?: string
 }

@@ -391,13 +391,23 @@ export const projectionApi = {
     return response.data
   },
 
-  get: async (companyId: number, startDate: string, endDate: string): Promise<ProjectionResponse> => {
-    const response = await api.get(`/api/v1/projections/${companyId}?start_date=${startDate}&end_date=${endDate}`)
+  get: async (companyId: number, startDate: string, endDate: string, bankAccountId?: number): Promise<ProjectionResponse> => {
+    const params = new URLSearchParams()
+    params.append('start_date', startDate)
+    params.append('end_date', endDate)
+    if (bankAccountId !== undefined) params.append('bank_account_id', bankAccountId.toString())
+    
+    const response = await api.get(`/api/v1/projections/${companyId}?${params}`)
     return response.data
   },
 
-  getDailyDetails: async (companyId: number, date: string): Promise<DailyProjection> => {
-    const response = await api.get(`/api/v1/projections/${companyId}/daily/${date}`)
+  getDailyDetails: async (companyId: number, date: string, bankAccountId?: number): Promise<DailyProjection> => {
+    const params = new URLSearchParams()
+    if (bankAccountId !== undefined) params.append('bank_account_id', bankAccountId.toString())
+    
+    const queryString = params.toString()
+    const url = `/api/v1/projections/${companyId}/daily/${date}${queryString ? `?${queryString}` : ''}`
+    const response = await api.get(url)
     return response.data
   },
 
@@ -405,7 +415,8 @@ export const projectionApi = {
     companyId: number,
     view: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' = 'monthly',
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    bankAccountId?: number
   ): Promise<{
     summary: Array<{
       period: string
@@ -421,8 +432,20 @@ export const projectionApi = {
     const params = new URLSearchParams({ view })
     if (startDate) params.append('start_date', startDate)
     if (endDate) params.append('end_date', endDate)
+    if (bankAccountId !== undefined) params.append('bank_account_id', bankAccountId.toString())
     
     const response = await api.get(`/api/v1/projections/${companyId}/summary?${params}`)
+    return response.data
+  },
+
+  getBankAccounts: async (companyId: number): Promise<Array<{
+    id: number
+    name: string
+    account_type: string
+    current_balance: number
+    is_default: boolean
+  }>> => {
+    const response = await api.get(`/api/v1/projections/${companyId}/bank-accounts`)
     return response.data
   },
 }

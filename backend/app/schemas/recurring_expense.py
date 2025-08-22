@@ -19,6 +19,7 @@ class RecurringExpenseBase(BaseModel):
     notes: Optional[str] = None
     company_id: int
     category_id: Optional[int] = None
+    bank_account_id: Optional[int] = None
 
 class RecurringExpenseCreate(RecurringExpenseBase):
     pass
@@ -38,6 +39,7 @@ class RecurringExpenseUpdate(BaseModel):
     reference: Optional[str] = None
     notes: Optional[str] = None
     category_id: Optional[int] = None
+    bank_account_id: Optional[int] = None
 
 class RecurringExpense(RecurringExpenseBase):
     model_config = ConfigDict(from_attributes=True)

@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.models.bank_account import BankAccount
 from app.models.user import User
 from app.schemas.bank_account import BankAccount as BankAccountSchema, BankAccountCreate, BankAccountUpdate
-from app.api.auth import get_current_active_user
+from app.core.auth import get_current_active_user
 
 router = APIRouter()
 

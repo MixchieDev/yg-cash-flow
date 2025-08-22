@@ -23,6 +23,11 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
 export function formatCurrency(amount: number, currencyCode: string = 'USD'): string {
   const config = CURRENCIES[currencyCode] || CURRENCIES.USD
   
+  // Handle invalid numbers
+  if (isNaN(amount) || !isFinite(amount)) {
+    amount = 0
+  }
+  
   try {
     return new Intl.NumberFormat(config.locale, {
       style: 'currency',

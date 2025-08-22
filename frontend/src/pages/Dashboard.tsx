@@ -87,7 +87,8 @@ export default function Dashboard() {
     
     // Calculate monthly totals (approximate)
     const monthlyIncome = activeIncomes.reduce((sum, income) => {
-      let monthlyAmount = income.amount
+      const amount = Number(income.amount) || 0
+      let monthlyAmount = amount
       if (income.frequency === 'weekly') monthlyAmount *= 4.33
       else if (income.frequency === 'quarterly') monthlyAmount /= 3
       else if (income.frequency === 'annually') monthlyAmount /= 12
@@ -95,14 +96,15 @@ export default function Dashboard() {
     }, 0)
     
     const monthlyExpense = activeExpenses.reduce((sum, expense) => {
-      let monthlyAmount = expense.amount
+      const amount = Number(expense.amount) || 0
+      let monthlyAmount = amount
       if (expense.frequency === 'weekly') monthlyAmount *= 4.33
       else if (expense.frequency === 'quarterly') monthlyAmount /= 3
       else if (expense.frequency === 'annually') monthlyAmount /= 12
       return sum + monthlyAmount
     }, 0)
 
-    const projected30Days = projectionSummary?.summary?.[0]?.running_balance || 0
+    const projected30Days = Number(projectionSummary?.summary?.[0]?.running_balance) || 0
 
     setStats({
       activeIncomePatterns: activeIncomes.length,
@@ -321,7 +323,7 @@ export default function Dashboard() {
                           <span className={`text-sm font-medium ${
                             item.item_type === 'income' ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            {item.item_type === 'income' ? '+' : '-'}{formatAmount(item.amount)}
+                            {item.item_type === 'income' ? '+' : '-'}{formatAmount(Number(item.amount) || 0)}
                           </span>
                         </div>
                       ))}

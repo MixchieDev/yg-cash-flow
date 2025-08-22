@@ -80,8 +80,36 @@ export default function Projections() {
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [viewStartDate, setViewStartDate] = useState<string>('')
   const [viewEndDate, setViewEndDate] = useState<string>('')
+  const [bankAccounts, setBankAccounts] = useState<Array<{
+    id: number
+    name: string
+    account_type: string
+    current_balance: number
+    is_default: boolean
+  }>>([])
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<number | undefined>(undefined)
   
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ProjectionRequest>()
+
+  // Fetch bank accounts when company changes
+  useEffect(() => {
+    const fetchBankAccounts = async () => {
+      if (!selectedCompany) return
+      
+      try {
+        const accounts = await projectionApi.getBankAccounts(selectedCompany.id)
+        setBankAccounts(accounts)
+        
+        // Reset selected bank account when company changes
+        setSelectedBankAccountId(undefined)
+      } catch (error) {
+        console.error('Error fetching bank accounts:', error)
+        setBankAccounts([])
+      }
+    }
+    
+    fetchBankAccounts()
+  }, [selectedCompany])
 
   useEffect(() => {
     if (selectedCompany) {
@@ -118,7 +146,7 @@ export default function Projections() {
       
       loadProjections()
     }
-  }, [selectedCompany, currentView, viewStartDate, viewEndDate])
+  }, [selectedCompany, currentView, viewStartDate, viewEndDate, selectedBankAccountId])
 
   const loadProjections = async () => {
     if (!selectedCompany || !viewStartDate || !viewEndDate) return
@@ -127,7 +155,13 @@ export default function Projections() {
     try {
       setError(null)
       
-      const data = await projectionApi.getSummary(selectedCompany.id, currentView, viewStartDate, viewEndDate)
+      const data = await projectionApi.getSummary(
+        selectedCompany.id, 
+        currentView, 
+        viewStartDate, 
+        viewEndDate, 
+        selectedBankAccountId
+      )
       setProjectionData(data)
     } catch (error: any) {
       console.error('Error loading projections:', error)
@@ -504,6 +538,10 @@ export default function Projections() {
           <h1 className="text-xl font-semibold text-gray-900">Cash Flow Projections</h1>
           <p className="mt-2 text-sm text-gray-700">
             View projected cash flows for {selectedCompany.name} based on your recurring income and expense patterns.
+            {selectedBankAccountId ? 
+              ` Currently showing projections for ${bankAccounts.find(a => a.id === selectedBankAccountId)?.name}.` :
+              ' Currently showing consolidated view across all accounts.'
+            }
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
@@ -593,6 +631,21 @@ export default function Projections() {
                 onChange={(e) => setViewEndDate(e.target.value)}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700">Bank Account</label>
+              <select
+                value={selectedBankAccountId || ''}
+                onChange={(e) => setSelectedBankAccountId(e.target.value ? Number(e.target.value) : undefined)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="">All Accounts (Consolidated)</option>
+                {bankAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} ({account.account_type}) - {formatAmount(account.current_balance)}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <button
