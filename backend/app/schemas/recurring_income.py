@@ -17,6 +17,7 @@ class RecurringIncomeBase(BaseModel):
     notes: Optional[str] = None
     company_id: int
     customer_id: Optional[int] = None
+    bank_account_id: Optional[int] = None
 
 class RecurringIncomeCreate(RecurringIncomeBase):
     pass
@@ -34,6 +35,7 @@ class RecurringIncomeUpdate(BaseModel):
     is_active: Optional[str] = None
     notes: Optional[str] = None
     customer_id: Optional[int] = None
+    bank_account_id: Optional[int] = None
 
 class RecurringIncome(RecurringIncomeBase):
     model_config = ConfigDict(from_attributes=True)

@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.recurring_income import RecurringIncome
 from app.models.customer import Customer
 from app.models.company import Company
+from app.models.bank_account import BankAccount
 from app.schemas.recurring_income import RecurringIncomeCreate, RecurringIncomeUpdate, RecurringIncome as RecurringIncomeSchema
 
 router = APIRouter()
@@ -24,7 +25,7 @@ def get_import_template(
     
     # Create CSV template with headers and sample data
     output = io.StringIO()
-    fieldnames = ['name', 'description', 'amount', 'vat_amount', 'frequency', 'start_date', 'end_date', 'day_of_month', 'day_of_week', 'is_active', 'notes', 'customer_name']
+    fieldnames = ['name', 'description', 'amount', 'vat_amount', 'frequency', 'start_date', 'end_date', 'day_of_month', 'day_of_week', 'is_active', 'notes', 'customer_name', 'bank_account_name']
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     
     writer.writeheader()
@@ -42,7 +43,8 @@ def get_import_template(
             'day_of_week': '',  # Not needed for monthly
             'is_active': 'active',
             'notes': 'Premium SaaS subscription',
-            'customer_name': 'Acme Corp'
+            'customer_name': 'Acme Corp',
+            'bank_account_name': 'Main Checking Account'
         },
         {
             'name': 'Weekly Consulting Retainer',
@@ -56,7 +58,8 @@ def get_import_template(
             'day_of_week': '0',  # Monday (0=Monday, 6=Sunday)
             'is_active': 'active',
             'notes': 'Strategic consulting retainer',
-            'customer_name': 'TechStart LLC'
+            'customer_name': 'TechStart LLC',
+            'bank_account_name': 'Business Savings Account'
         },
         {
             'name': 'Quarterly License Fee',
@@ -70,7 +73,8 @@ def get_import_template(
             'day_of_week': '',
             'is_active': 'active',
             'notes': 'Enterprise license agreement',
-            'customer_name': 'Enterprise Client'
+            'customer_name': 'Enterprise Client',
+            'bank_account_name': 'Main Checking Account'
         }
     ]
     
@@ -95,7 +99,8 @@ def get_import_template(
             "day_of_week": "Day of week for weekly (0-6, 0=Monday, required for weekly)",
             "is_active": "Status: active, paused, ended (default: active)",
             "notes": "Additional notes (optional)",
-            "customer_name": "Customer name (optional, must match existing customer)"
+            "customer_name": "Customer name (optional, must match existing customer)",
+            "bank_account_name": "Bank account name (required, must match existing bank account)"
         }
     }
 
@@ -253,6 +258,32 @@ def import_recurring_income_csv(
                         errors.append(f"Row {row_num}: Customer '{row['customer_name']}' not found")
                         continue
                 
+                # Find bank account (required)
+                bank_account_id = None
+                if row.get('bank_account_name', '').strip():
+                    bank_account = db.query(BankAccount).filter(
+                        BankAccount.name == row['bank_account_name'].strip(),
+                        BankAccount.company_id == company_id,
+                        BankAccount.is_active == True
+                    ).first()
+                    if bank_account:
+                        bank_account_id = bank_account.id
+                    else:
+                        errors.append(f"Row {row_num}: Bank account '{row['bank_account_name']}' not found or inactive")
+                        continue
+                else:
+                    # If no bank account specified, try to find default
+                    default_bank_account = db.query(BankAccount).filter(
+                        BankAccount.company_id == company_id,
+                        BankAccount.is_active == True,
+                        BankAccount.is_default == True
+                    ).first()
+                    if default_bank_account:
+                        bank_account_id = default_bank_account.id
+                    else:
+                        errors.append(f"Row {row_num}: Bank account is required. Please specify bank_account_name or set a default bank account.")
+                        continue
+                
                 # Validate frequency
                 frequency = row.get('frequency', '').strip().lower()
                 if frequency not in ['weekly', 'monthly', 'quarterly', 'annually']:
@@ -311,7 +342,8 @@ def import_recurring_income_csv(
                     'is_active': row.get('is_active', 'active').strip().lower(),
                     'notes': row.get('notes', '').strip() or None,
                     'company_id': company_id,
-                    'customer_id': customer_id
+                    'customer_id': customer_id,
+                    'bank_account_id': bank_account_id
                 }
                 
                 # Validate required fields
@@ -371,7 +403,7 @@ def export_recurring_income_csv(
     
     # Create CSV content
     output = io.StringIO()
-    fieldnames = ['name', 'description', 'amount', 'vat_amount', 'frequency', 'start_date', 'end_date', 'day_of_month', 'day_of_week', 'is_active', 'notes', 'customer_name']
+    fieldnames = ['name', 'description', 'amount', 'vat_amount', 'frequency', 'start_date', 'end_date', 'day_of_month', 'day_of_week', 'is_active', 'notes', 'customer_name', 'bank_account_name']
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     
     writer.writeheader()
@@ -382,6 +414,13 @@ def export_recurring_income_csv(
             customer = db.query(Customer).filter(Customer.id == income.customer_id).first()
             if customer:
                 customer_name = customer.name
+        
+        # Get bank account name if bank_account_id exists
+        bank_account_name = ''
+        if income.bank_account_id:
+            bank_account = db.query(BankAccount).filter(BankAccount.id == income.bank_account_id).first()
+            if bank_account:
+                bank_account_name = bank_account.name
         
         writer.writerow({
             'name': income.name,
@@ -395,7 +434,8 @@ def export_recurring_income_csv(
             'day_of_week': str(income.day_of_week) if income.day_of_week is not None else '',
             'is_active': income.is_active or 'active',
             'notes': income.notes or '',
-            'customer_name': customer_name
+            'customer_name': customer_name,
+            'bank_account_name': bank_account_name
         })
     
     csv_content = output.getvalue()

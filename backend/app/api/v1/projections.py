@@ -12,6 +12,7 @@ from app.schemas.projection import (
     ProjectionSummary, ProjectionItem, DailyProjection
 )
 from app.services.projection_service import ProjectionCalculationService
+from app.models.bank_account import BankAccount
 
 router = APIRouter()
 
@@ -44,13 +45,14 @@ def get_projections(
     company_id: int,
     start_date: date = Query(..., description="Start date for projections"),
     end_date: date = Query(..., description="End date for projections"),
+    bank_account_id: Optional[int] = Query(None, description="Filter by specific bank account (None for consolidated view)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Get cash flow projections for a company"""
     projection_service = ProjectionCalculationService(db)
     
-    projections = projection_service.get_projections(company_id, start_date, end_date)
+    projections = projection_service.get_projections(company_id, start_date, end_date, bank_account_id)
     
     if not projections:
         raise HTTPException(
@@ -89,13 +91,14 @@ def get_projections(
 def get_daily_projection_details(
     company_id: int,
     projection_date: date,
+    bank_account_id: Optional[int] = Query(None, description="Filter by specific bank account"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Get detailed breakdown for a specific projection date"""
     projection_service = ProjectionCalculationService(db)
     
-    items = projection_service.get_projection_items(company_id, projection_date)
+    items = projection_service.get_projection_items(company_id, projection_date, bank_account_id)
     
     if not items:
         return {"items": [], "date": projection_date, "income": 0, "expenses": 0, "net_flow": 0}
@@ -117,6 +120,7 @@ def get_projection_summary(
     view: str = Query("monthly", description="Summary view: daily, weekly, monthly, quarterly, yearly"),
     start_date: Optional[date] = Query(None, description="Start date (defaults to current date)"),
     end_date: Optional[date] = Query(None, description="End date (defaults to 1 year from start)"),
+    bank_account_id: Optional[int] = Query(None, description="Filter by specific bank account (None for consolidated view)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -131,7 +135,7 @@ def get_projection_summary(
             end_date = start_date + timedelta(days=365)  # 1 year default
     
     projection_service = ProjectionCalculationService(db)
-    projections = projection_service.get_projections(company_id, start_date, end_date)
+    projections = projection_service.get_projections(company_id, start_date, end_date, bank_account_id)
     
     if not projections:
         return {"summary": [], "view": view, "start_date": start_date, "end_date": end_date}
@@ -243,3 +247,26 @@ def get_projection_summary(
         "start_date": start_date,
         "end_date": end_date
     }
+
+@router.get("/{company_id}/bank-accounts")
+def get_company_bank_accounts(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get available bank accounts for projection filtering"""
+    bank_accounts = db.query(BankAccount).filter(
+        BankAccount.company_id == company_id,
+        BankAccount.is_active == True
+    ).all()
+    
+    return [
+        {
+            "id": account.id,
+            "name": account.name,
+            "account_type": account.account_type,
+            "current_balance": float(account.current_balance),
+            "is_default": account.is_default
+        }
+        for account in bank_accounts
+    ]

@@ -2,8 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, StopIcon, CurrencyDollarIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { useCompanyStore } from '../stores/companyStore'
-import { recurringExpenseApi, expenseCategoryApi } from '../services/api'
-import { RecurringExpense as RecurringExpenseType, ExpenseCategory, FrequencyType } from '../types'
+import { recurringExpenseApi, expenseCategoryApi, bankAccountApi } from '../services/api'
+import { RecurringExpense as RecurringExpenseType, ExpenseCategory, FrequencyType, BankAccount } from '../types'
 import { formatCurrency } from '../utils/currency'
 
 const frequencyOptions: { value: FrequencyType; label: string; description: string }[] = [
@@ -41,9 +41,11 @@ export default function RecurringExpense() {
   const [expensePatterns, setExpensePatterns] = useState<RecurringExpenseType[]>([])
   const [filteredPatterns, setFilteredPatterns] = useState<RecurringExpenseType[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [frequencyFilter, setFrequencyFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [bankAccountFilter, setBankAccountFilter] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
   const [editingPattern, setEditingPattern] = useState<RecurringExpenseType | null>(null)
   const [selectedPatterns, setSelectedPatterns] = useState<number[]>([])
@@ -61,6 +63,7 @@ export default function RecurringExpense() {
     if (selectedCompany) {
       fetchExpensePatterns()
       fetchCategories()
+      fetchBankAccounts()
     }
   }, [selectedCompany])
 
@@ -85,8 +88,17 @@ export default function RecurringExpense() {
       filtered = filtered.filter(pattern => pattern.is_active === statusFilter)
     }
 
+    if (bankAccountFilter !== 'all') {
+      filtered = filtered.filter(pattern => {
+        if (bankAccountFilter === 'none') {
+          return !pattern.bank_account_id
+        }
+        return pattern.bank_account_id === parseInt(bankAccountFilter)
+      })
+    }
+
     setFilteredPatterns(filtered)
-  }, [expensePatterns, searchTerm, frequencyFilter, statusFilter])
+  }, [expensePatterns, searchTerm, frequencyFilter, statusFilter, bankAccountFilter])
 
   const fetchExpensePatterns = async () => {
     if (!selectedCompany) return
@@ -117,6 +129,17 @@ export default function RecurringExpense() {
     }
   }
 
+  const fetchBankAccounts = async () => {
+    if (!selectedCompany) return
+    
+    try {
+      const data = await bankAccountApi.getByCompany(selectedCompany.id)
+      setBankAccounts(data)
+    } catch (error) {
+      console.error('Error fetching bank accounts:', error)
+    }
+  }
+
   const onSubmit = async (data: Omit<RecurringExpenseType, 'id' | 'created_at' | 'updated_at'>) => {
     if (!selectedCompany) return
     
@@ -126,6 +149,7 @@ export default function RecurringExpense() {
         ...data,
         company_id: selectedCompany.id,
         category_id: data.category_id || undefined,
+        bank_account_id: data.bank_account_id ? Number(data.bank_account_id) : undefined,
         amount: Number(data.amount),
         vat_amount: Number(data.vat_amount || 0),
         day_of_month: data.frequency === 'monthly' || data.frequency === 'quarterly' ? data.day_of_month : undefined,
@@ -473,7 +497,7 @@ export default function RecurringExpense() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
               <select
@@ -502,13 +526,31 @@ export default function RecurringExpense() {
               </select>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bank Account</label>
+              <select
+                value={bankAccountFilter}
+                onChange={(e) => setBankAccountFilter(e.target.value)}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 sm:text-sm"
+              >
+                <option value="all">All Accounts</option>
+                <option value="none">No Account</option>
+                {bankAccounts.map((account) => (
+                  <option key={account.id} value={account.id.toString()}>
+                    {account.name} ({account.account_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-end">
-              {(searchTerm || frequencyFilter !== 'all' || statusFilter !== 'all') && (
+              {(searchTerm || frequencyFilter !== 'all' || statusFilter !== 'all' || bankAccountFilter !== 'all') && (
                 <button
                   onClick={() => {
                     setSearchTerm('')
                     setFrequencyFilter('all')
                     setStatusFilter('all')
+                    setBankAccountFilter('all')
                   }}
                   className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
@@ -613,6 +655,9 @@ export default function RecurringExpense() {
                       Schedule
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Bank Account
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="relative px-6 py-3">
@@ -623,13 +668,13 @@ export default function RecurringExpense() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                         Loading expense patterns...
                       </td>
                     </tr>
                   ) : filteredPatterns.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                         {expensePatterns.length === 0 ? 'No expense patterns found. Set up your first recurring expense!' : 'No patterns match your filters.'}
                       </td>
                     </tr>
@@ -671,6 +716,18 @@ export default function RecurringExpense() {
                           {pattern.end_date && (
                             <div>End: {new Date(pattern.end_date).toLocaleDateString()}</div>
                           )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {(() => {
+                            if (!pattern.bank_account_id) return 'N/A'
+                            const bankAccount = bankAccounts.find(ba => ba.id === pattern.bank_account_id)
+                            return bankAccount ? (
+                              <div>
+                                <div className="font-medium">{bankAccount.name}</div>
+                                <div className="text-xs text-gray-500">{bankAccount.account_type}</div>
+                              </div>
+                            ) : 'N/A'
+                          })()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${getStatusColor(pattern.is_active)}`}>
@@ -869,6 +926,21 @@ export default function RecurringExpense() {
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Bank Account</label>
+                  <select
+                    {...register('bank_account_id')}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                  >
+                    <option value="">Select bank account (optional)</option>
+                    {bankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} ({account.account_type})
                       </option>
                     ))}
                   </select>

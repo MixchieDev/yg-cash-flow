@@ -36,5 +36,7 @@ class ProjectionItem(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    bank_account_id = Column(Integer, ForeignKey("bank_accounts.id"))  # Optional, for account-specific items
     
     company = relationship("Company")
+    bank_account = relationship("BankAccount")

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, StopIcon, CalendarIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, DocumentArrowDownIcon, AdjustmentsHorizontalIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useCompanyStore } from '../stores/companyStore'
-import { recurringIncomeApi, customerApi } from '../services/api'
+import { recurringIncomeApi, customerApi, bankAccountApi } from '../services/api'
 import { RecurringIncome as RecurringIncomeType, Customer, FrequencyType } from '../types'
 import { formatCurrency } from '../utils/currency'
 
@@ -41,9 +41,17 @@ export default function RecurringIncome() {
   const [incomePatterns, setIncomePatterns] = useState<RecurringIncomeType[]>([])
   const [filteredPatterns, setFilteredPatterns] = useState<RecurringIncomeType[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [bankAccounts, setBankAccounts] = useState<Array<{
+    id: number
+    name: string
+    account_type: string
+    current_balance: number
+    is_default: boolean
+  }>>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [frequencyFilter, setFrequencyFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [bankAccountFilter, setBankAccountFilter] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
   const [editingPattern, setEditingPattern] = useState<RecurringIncomeType | null>(null)
   const [selectedPatterns, setSelectedPatterns] = useState<number[]>([])
@@ -67,7 +75,8 @@ export default function RecurringIncome() {
     start_date: true,
     end_date: false,
     status: true,
-    notes: false
+    notes: false,
+    bank_account: true
   })
   
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Omit<RecurringIncomeType, 'id' | 'created_at' | 'updated_at'>>()
@@ -77,6 +86,7 @@ export default function RecurringIncome() {
     if (selectedCompany) {
       fetchIncomePatterns()
       fetchCustomers()
+      fetchBankAccounts()
     }
   }, [selectedCompany])
 
@@ -100,8 +110,12 @@ export default function RecurringIncome() {
       filtered = filtered.filter(pattern => pattern.is_active === statusFilter)
     }
 
+    if (bankAccountFilter !== 'all') {
+      filtered = filtered.filter(pattern => pattern.bank_account_id === Number(bankAccountFilter))
+    }
+
     setFilteredPatterns(filtered)
-  }, [incomePatterns, searchTerm, frequencyFilter, statusFilter])
+  }, [incomePatterns, searchTerm, frequencyFilter, statusFilter, bankAccountFilter])
 
   // Close column settings when clicking outside
   useEffect(() => {
@@ -148,6 +162,8 @@ export default function RecurringIncome() {
         updateValue = parseInt(editingValue) || null
       } else if (editingCell.field === 'start_date' || editingCell.field === 'end_date') {
         updateValue = editingValue || null
+      } else if (editingCell.field === 'bank_account_id') {
+        updateValue = editingValue ? parseInt(editingValue) : null
       }
 
       const updatedPattern = await recurringIncomeApi.update(editingCell.id, {
@@ -181,17 +197,37 @@ export default function RecurringIncome() {
     if (isEditing) {
       return (
         <div className="flex items-center space-x-2">
-          <input
-            type={field === 'amount' || field === 'vat_amount' ? 'number' : field.includes('date') ? 'date' : 'text'}
-            value={editingValue}
-            onChange={(e) => setEditingValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCellSave()
-              if (e.key === 'Escape') handleCellCancel()
-            }}
-            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            autoFocus
-          />
+          {field === 'bank_account_id' ? (
+            <select
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCellSave()
+                if (e.key === 'Escape') handleCellCancel()
+              }}
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+            >
+              <option value="">Select account</option>
+              {bankAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.account_type})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={field === 'amount' || field === 'vat_amount' ? 'number' : field.includes('date') ? 'date' : 'text'}
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCellSave()
+                if (e.key === 'Escape') handleCellCancel()
+              }}
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+            />
+          )}
           <button
             onClick={handleCellSave}
             className="text-green-600 hover:text-green-900"
@@ -218,6 +254,8 @@ export default function RecurringIncome() {
           ? formatAmount(Number(value) || 0)
           : field.includes('date') 
             ? value ? new Date(value).toLocaleDateString() : '-'
+            : field === 'bank_account_id'
+            ? bankAccounts.find(acc => acc.id === value)?.name || 'N/A'
             : String(value || '-')
         }
       </div>
@@ -255,6 +293,17 @@ export default function RecurringIncome() {
     }
   }
 
+  const fetchBankAccounts = async () => {
+    if (!selectedCompany) return
+    
+    try {
+      const data = await bankAccountApi.getByCompany(selectedCompany.id)
+      setBankAccounts(data)
+    } catch (error) {
+      console.error('Error fetching bank accounts:', error)
+    }
+  }
+
   const onSubmit = async (data: Omit<RecurringIncomeType, 'id' | 'created_at' | 'updated_at'>) => {
     if (!selectedCompany) return
     
@@ -264,6 +313,7 @@ export default function RecurringIncome() {
         ...data,
         company_id: selectedCompany.id,
         customer_id: data.customer_id || undefined,
+        bank_account_id: data.bank_account_id ? Number(data.bank_account_id) : undefined,
         amount: Number(data.amount),
         vat_amount: Number(data.vat_amount || 0),
         day_of_month: data.frequency === 'monthly' || data.frequency === 'quarterly' ? data.day_of_month : undefined,
@@ -297,6 +347,7 @@ export default function RecurringIncome() {
       ...pattern,
       start_date: pattern.start_date.split('T')[0],
       end_date: pattern.end_date?.split('T')[0],
+      bank_account_id: pattern.bank_account_id?.toString() || '',
     })
     setShowModal(true)
   }
@@ -582,7 +633,8 @@ export default function RecurringIncome() {
                       start_date: 'Start Date',
                       end_date: 'End Date',
                       status: 'Status',
-                      notes: 'Notes'
+                      notes: 'Notes',
+                      bank_account: 'Bank Account'
                     }).map(([key, label]) => (
                       <label key={key} className="flex items-center px-4 py-2 text-sm hover:bg-gray-100">
                         <input
@@ -667,13 +719,30 @@ export default function RecurringIncome() {
               </select>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bank Account</label>
+              <select
+                value={bankAccountFilter}
+                onChange={(e) => setBankAccountFilter(e.target.value)}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              >
+                <option value="all">All Accounts</option>
+                {bankAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} ({account.account_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-end">
-              {(searchTerm || frequencyFilter !== 'all' || statusFilter !== 'all') && (
+              {(searchTerm || frequencyFilter !== 'all' || statusFilter !== 'all' || bankAccountFilter !== 'all') && (
                 <button
                   onClick={() => {
                     setSearchTerm('')
                     setFrequencyFilter('all')
                     setStatusFilter('all')
+                    setBankAccountFilter('all')
                   }}
                   className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
@@ -810,6 +879,11 @@ export default function RecurringIncome() {
                         Notes
                       </th>
                     )}
+                    {visibleColumns.bank_account && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Bank Account
+                      </th>
+                    )}
                     <th className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -902,6 +976,11 @@ export default function RecurringIncome() {
                           {visibleColumns.notes && (
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {renderEditableCell(pattern, 'notes', pattern.notes)}
+                            </td>
+                          )}
+                          {visibleColumns.bank_account && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {renderEditableCell(pattern, 'bank_account_id', pattern.bank_account_id)}
                             </td>
                           )}
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -1100,6 +1179,24 @@ export default function RecurringIncome() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Bank Account</label>
+                  <select
+                    {...register('bank_account_id', { required: 'Bank account is required' })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="">Select bank account</option>
+                    {bankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} ({account.account_type}) - {formatAmount(account.current_balance)}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.bank_account_id && (
+                    <p className="mt-1 text-sm text-red-600">{getErrorMessage(errors.bank_account_id)}</p>
+                  )}
                 </div>
 
                 <div>

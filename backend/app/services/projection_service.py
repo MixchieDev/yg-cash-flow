@@ -9,13 +9,14 @@ from app.models.recurring_income import RecurringIncome, FrequencyType as Income
 from app.models.recurring_expense import RecurringExpense, FrequencyType as ExpenseFrequency
 from app.models.one_off_item import OneOffItem
 from app.models.cash_flow_projection import CashFlowProjection, ProjectionItem
+from app.models.bank_account import BankAccount
 
 class ProjectionCalculationService:
     def __init__(self, db: Session):
         self.db = db
 
-    def generate_projections(self, company_id: int, start_date: date, end_date: date, starting_balance: Decimal = Decimal('0.00')):
-        """Generate cash flow projections for a company over a date range"""
+    def generate_projections(self, company_id: int, start_date: date, end_date: date, starting_balance: Optional[Decimal] = None):
+        """Generate cash flow projections for a company over a date range with per-account tracking"""
         
         # Clear existing projections for this date range
         self.db.query(CashFlowProjection).filter(
@@ -33,6 +34,17 @@ class ProjectionCalculationService:
                 ProjectionItem.projection_date <= end_date
             )
         ).delete()
+
+        # Get all bank accounts for this company
+        bank_accounts = self.db.query(BankAccount).filter(
+            and_(
+                BankAccount.company_id == company_id,
+                BankAccount.is_active == True
+            )
+        ).all()
+        
+        if not bank_accounts:
+            raise ValueError("No active bank accounts found for company. Please create at least one bank account.")
 
         # Get all active recurring income and expenses
         recurring_incomes = self.db.query(RecurringIncome).filter(
@@ -55,11 +67,11 @@ class ProjectionCalculationService:
                 OneOffItem.company_id == company_id,
                 OneOffItem.planned_date >= start_date,
                 OneOffItem.planned_date <= end_date,
-                OneOffItem.is_confirmed.in_(["planned", "confirmed"])  # Include planned and confirmed items
+                OneOffItem.is_confirmed.in_(["planned", "confirmed"])
             )
         ).all()
 
-        # Generate all projection items
+        # Generate all projection items with bank account assignments
         all_items = []
         
         # Process recurring income
@@ -80,41 +92,72 @@ class ProjectionCalculationService:
         # Sort by date
         all_items.sort(key=lambda x: x.projection_date)
 
-        # Group by date and calculate daily projections
-        daily_projections = {}
-        current_date = start_date
-        running_balance = starting_balance
+        # Initialize account balances
+        account_balances = {}
+        for account in bank_accounts:
+            account_balances[account.id] = account.current_balance
 
+        # Generate per-account projections and consolidated view
+        current_date = start_date
         while current_date <= end_date:
-            daily_income = Decimal('0.00')
-            daily_expense = Decimal('0.00')
+            # Calculate per-account flows for this date
+            account_flows = {account.id: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for account in bank_accounts}
             
-            # Sum up all items for this date
+            # Sum up all items for this date by account
             for item in all_items:
                 if item.projection_date.date() == current_date:
-                    if item.item_type == "income":
-                        daily_income += item.amount
-                    else:
-                        daily_expense += item.amount
+                    account_id = item.bank_account_id
+                    if account_id and account_id in account_flows:
+                        if item.item_type == "income":
+                            account_flows[account_id]['income'] += item.amount
+                        else:
+                            account_flows[account_id]['expense'] += item.amount
 
-            net_flow = daily_income - daily_expense
-            running_balance += net_flow
+            # Create per-account projections
+            total_income = Decimal('0.00')
+            total_expense = Decimal('0.00')
             
-            # Debug logging for first few days
-            if (current_date - start_date).days < 5 or daily_income > 0 or daily_expense > 0:
-                print(f"Date: {current_date}, Income: {daily_income}, Expense: {daily_expense}, Net: {net_flow}, Running Balance: {running_balance}")
+            for account in bank_accounts:
+                account_id = account.id
+                daily_income = account_flows[account_id]['income']
+                daily_expense = account_flows[account_id]['expense']
+                net_flow = daily_income - daily_expense
+                
+                # Update account balance
+                account_balances[account_id] += net_flow
+                
+                # Create per-account projection (only if there's activity or we want daily snapshots)
+                if daily_income > 0 or daily_expense > 0 or current_date == start_date:
+                    projection = CashFlowProjection(
+                        company_id=company_id,
+                        bank_account_id=account_id,
+                        projection_date=datetime.combine(current_date, datetime.min.time()),
+                        income_amount=daily_income,
+                        expense_amount=daily_expense,
+                        net_flow=net_flow,
+                        running_balance=account_balances[account_id]
+                    )
+                    self.db.add(projection)
+                
+                # Add to totals for consolidated view
+                total_income += daily_income
+                total_expense += daily_expense
 
-            # Create projection record
-            projection = CashFlowProjection(
+            # Create consolidated company-wide projection
+            total_net_flow = total_income - total_expense
+            total_balance = sum(account_balances.values())
+            
+            consolidated_projection = CashFlowProjection(
                 company_id=company_id,
+                bank_account_id=None,  # NULL for consolidated view
                 projection_date=datetime.combine(current_date, datetime.min.time()),
-                income_amount=daily_income,
-                expense_amount=daily_expense,
-                net_flow=net_flow,
-                running_balance=running_balance
+                income_amount=total_income,
+                expense_amount=total_expense,
+                net_flow=total_net_flow,
+                running_balance=total_balance
             )
+            self.db.add(consolidated_projection)
             
-            self.db.add(projection)
             current_date += timedelta(days=1)
 
         # Bulk insert all projection items
@@ -144,7 +187,8 @@ class ProjectionCalculationService:
                     amount=income.amount,
                     vat_amount=income.vat_amount or Decimal('0.00'),
                     source_type="recurring_income",
-                    source_id=income.id
+                    source_id=income.id,
+                    bank_account_id=income.bank_account_id
                 )
                 items.append(item)
             
@@ -174,7 +218,8 @@ class ProjectionCalculationService:
                     amount=expense.amount,
                     vat_amount=expense.vat_amount or Decimal('0.00'),
                     source_type="recurring_expense",
-                    source_id=expense.id
+                    source_id=expense.id,
+                    bank_account_id=expense.bank_account_id
                 )
                 items.append(item)
             
@@ -302,25 +347,39 @@ class ProjectionCalculationService:
             amount=one_off.amount,
             vat_amount=one_off.vat_amount or Decimal('0.00'),
             source_type="one_off_item",
-            source_id=one_off.id
+            source_id=one_off.id,
+            bank_account_id=one_off.bank_account_id
         )
         return item
 
-    def get_projections(self, company_id: int, start_date: date, end_date: date) -> List[CashFlowProjection]:
-        """Get cash flow projections for a date range"""
-        return self.db.query(CashFlowProjection).filter(
+    def get_projections(self, company_id: int, start_date: date, end_date: date, bank_account_id: Optional[int] = None) -> List[CashFlowProjection]:
+        """Get cash flow projections for a date range, optionally filtered by bank account"""
+        query = self.db.query(CashFlowProjection).filter(
             and_(
                 CashFlowProjection.company_id == company_id,
                 CashFlowProjection.projection_date >= start_date,
                 CashFlowProjection.projection_date <= end_date
             )
-        ).order_by(CashFlowProjection.projection_date).all()
+        )
+        
+        if bank_account_id is not None:
+            query = query.filter(CashFlowProjection.bank_account_id == bank_account_id)
+        else:
+            # Return consolidated view (bank_account_id is NULL)
+            query = query.filter(CashFlowProjection.bank_account_id.is_(None))
+            
+        return query.order_by(CashFlowProjection.projection_date).all()
 
-    def get_projection_items(self, company_id: int, projection_date: date) -> List[ProjectionItem]:
-        """Get detailed projection items for a specific date"""
-        return self.db.query(ProjectionItem).filter(
+    def get_projection_items(self, company_id: int, projection_date: date, bank_account_id: Optional[int] = None) -> List[ProjectionItem]:
+        """Get detailed projection items for a specific date, optionally filtered by bank account"""
+        query = self.db.query(ProjectionItem).filter(
             and_(
                 ProjectionItem.company_id == company_id,
                 ProjectionItem.projection_date == datetime.combine(projection_date, datetime.min.time())
             )
-        ).order_by(ProjectionItem.item_name).all()
+        )
+        
+        if bank_account_id is not None:
+            query = query.filter(ProjectionItem.bank_account_id == bank_account_id)
+            
+        return query.order_by(ProjectionItem.item_name).all()
