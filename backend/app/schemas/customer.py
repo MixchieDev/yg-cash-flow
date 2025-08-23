@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime, date
 
@@ -18,6 +18,20 @@ class CustomerBase(BaseModel):
     revenue_model: Optional[str] = None
     partner: Optional[str] = None
     contract_start: Optional[date] = None
+    
+    @field_validator('email', 'phone', 'address', 'contact_person', 'notes', 'company_name', 'product_type', 'revenue_model', 'partner', mode='before')
+    @classmethod
+    def validate_empty_strings(cls, v):
+        if v == '':
+            return None
+        return v
+    
+    @field_validator('contract_start', mode='before')
+    @classmethod
+    def validate_contract_start(cls, v):
+        if v == '' or v is None:
+            return None
+        return v
 
 class CustomerCreate(CustomerBase):
     company_id: int
@@ -38,6 +52,13 @@ class CustomerUpdate(BaseModel):
     revenue_model: Optional[str] = None
     partner: Optional[str] = None
     contract_start: Optional[date] = None
+    
+    @field_validator('contract_start', mode='before')
+    @classmethod
+    def validate_contract_start(cls, v):
+        if v == '' or v is None:
+            return None
+        return v
 
 class Customer(CustomerBase):
     id: int

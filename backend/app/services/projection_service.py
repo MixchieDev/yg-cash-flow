@@ -5,8 +5,8 @@ from sqlalchemy import and_
 from typing import List, Dict, Optional
 from decimal import Decimal
 
-from app.models.recurring_income import RecurringIncome, FrequencyType as IncomeFrequency
-from app.models.recurring_expense import RecurringExpense, FrequencyType as ExpenseFrequency
+from app.models.recurring_income import RecurringIncome
+from app.models.recurring_expense import RecurringExpense
 from app.models.one_off_item import OneOffItem
 from app.models.cash_flow_projection import CashFlowProjection, ProjectionItem
 from app.models.bank_account import BankAccount
@@ -105,7 +105,8 @@ class ProjectionCalculationService:
             
             # Sum up all items for this date by account
             for item in all_items:
-                if item.projection_date.date() == current_date:
+                item_date = item.projection_date.date() if hasattr(item.projection_date, 'date') else item.projection_date
+                if item_date == current_date:
                     account_id = item.bank_account_id
                     if account_id and account_id in account_flows:
                         if item.item_type == "income":
@@ -126,18 +127,17 @@ class ProjectionCalculationService:
                 # Update account balance
                 account_balances[account_id] += net_flow
                 
-                # Create per-account projection (only if there's activity or we want daily snapshots)
-                if daily_income > 0 or daily_expense > 0 or current_date == start_date:
-                    projection = CashFlowProjection(
-                        company_id=company_id,
-                        bank_account_id=account_id,
-                        projection_date=datetime.combine(current_date, datetime.min.time()),
-                        income_amount=daily_income,
-                        expense_amount=daily_expense,
-                        net_flow=net_flow,
-                        running_balance=account_balances[account_id]
-                    )
-                    self.db.add(projection)
+                # Create per-account projection for every day to show complete balance history
+                projection = CashFlowProjection(
+                    company_id=company_id,
+                    bank_account_id=account_id,
+                    projection_date=datetime.combine(current_date, datetime.min.time()),
+                    income_amount=daily_income,
+                    expense_amount=daily_expense,
+                    net_flow=net_flow,
+                    running_balance=account_balances[account_id]
+                )
+                self.db.add(projection)
                 
                 # Add to totals for consolidated view
                 total_income += daily_income
@@ -171,8 +171,10 @@ class ProjectionCalculationService:
         items = []
         
         # Find the first occurrence on or after the start_date
-        current_date = max(start_date, income.start_date.date())
-        end_limit = min(end_date, income.end_date.date() if income.end_date else end_date)
+        income_start = income.start_date.date() if hasattr(income.start_date, 'date') else income.start_date
+        income_end = income.end_date.date() if income.end_date and hasattr(income.end_date, 'date') else income.end_date
+        current_date = max(start_date, income_start)
+        end_limit = min(end_date, income_end if income_end else end_date)
 
         # Check if there's an occurrence in the current month/period that we should include
         first_occurrence = self._find_first_occurrence(current_date, income.frequency, income.day_of_month, income.day_of_week)
@@ -202,8 +204,10 @@ class ProjectionCalculationService:
         items = []
         
         # Find the first occurrence on or after the start_date
-        current_date = max(start_date, expense.start_date.date())
-        end_limit = min(end_date, expense.end_date.date() if expense.end_date else end_date)
+        expense_start = expense.start_date.date() if hasattr(expense.start_date, 'date') else expense.start_date
+        expense_end = expense.end_date.date() if expense.end_date and hasattr(expense.end_date, 'date') else expense.end_date
+        current_date = max(start_date, expense_start)
+        end_limit = min(end_date, expense_end if expense_end else end_date)
 
         # Check if there's an occurrence in the current month/period that we should include
         first_occurrence = self._find_first_occurrence(current_date, expense.frequency, expense.day_of_month, expense.day_of_week)

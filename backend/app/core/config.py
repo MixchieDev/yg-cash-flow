@@ -1,5 +1,9 @@
 import os
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Settings(BaseModel):
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./cashflow.db")

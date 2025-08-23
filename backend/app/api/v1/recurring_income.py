@@ -100,7 +100,7 @@ def get_import_template(
             "is_active": "Status: active, paused, ended (default: active)",
             "notes": "Additional notes (optional)",
             "customer_name": "Customer name (optional, must match existing customer)",
-            "bank_account_name": "Bank account name (required, must match existing bank account)"
+            "bank_account_name": "Bank account name (required, will match by name or partial name match. Use exact name from Bank Accounts page for best results)"
         }
     }
 
@@ -159,13 +159,57 @@ def update_recurring_income(
             detail="Recurring income not found"
         )
     
-    update_data = income_update.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_income, field, value)
-    
-    db.commit()
-    db.refresh(db_income)
-    return db_income
+    try:
+        update_data = income_update.dict(exclude_unset=True)
+        
+        # Add validation for frequency-specific requirements
+        if 'frequency' in update_data or 'day_of_month' in update_data or 'day_of_week' in update_data:
+            frequency = update_data.get('frequency', db_income.frequency)
+            
+            if frequency in ['monthly', 'quarterly']:
+                day_of_month = update_data.get('day_of_month', db_income.day_of_month)
+                if not day_of_month or not (1 <= day_of_month <= 31):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"day_of_month (1-31) is required for {frequency} frequency"
+                    )
+                # Clear day_of_week for monthly/quarterly
+                update_data['day_of_week'] = None
+                
+            elif frequency == 'weekly':
+                day_of_week = update_data.get('day_of_week', db_income.day_of_week)
+                if day_of_week is None or not (0 <= day_of_week <= 6):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="day_of_week (0-6, 0=Monday) is required for weekly frequency"
+                    )
+                # Clear day_of_month for weekly
+                update_data['day_of_month'] = None
+                
+            elif frequency == 'annually':
+                # Clear both for annually
+                update_data['day_of_month'] = None
+                update_data['day_of_week'] = None
+        
+        for field, value in update_data.items():
+            setattr(db_income, field, value)
+        
+        db.commit()
+        db.refresh(db_income)
+        return db_income
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error updating recurring income: {str(e)}")
+        print(f"Update data: {update_data}")
+        print(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Validation error: {str(e)}"
+        )
 
 @router.delete("/{income_id}")
 def delete_recurring_income(
@@ -258,18 +302,50 @@ def import_recurring_income_csv(
                         errors.append(f"Row {row_num}: Customer '{row['customer_name']}' not found")
                         continue
                 
-                # Find bank account (required)
+                # Find bank account (required) - improved matching
                 bank_account_id = None
                 if row.get('bank_account_name', '').strip():
+                    bank_account_name = row['bank_account_name'].strip()
+                    
+                    # First try exact match
                     bank_account = db.query(BankAccount).filter(
-                        BankAccount.name == row['bank_account_name'].strip(),
+                        BankAccount.name == bank_account_name,
                         BankAccount.company_id == company_id,
                         BankAccount.is_active == True
                     ).first()
+                    
+                    # If no exact match, try partial matching
+                    if not bank_account:
+                        # Extract the main name part before account type or balance info
+                        # Handle formats like "YOWI CA (checking) - ₱601,023.27"
+                        main_name = bank_account_name.split('(')[0].strip()  # Get part before parentheses
+                        main_name = main_name.split('-')[0].strip()  # Get part before dash
+                        
+                        # Try to find bank account that starts with the main name
+                        bank_account = db.query(BankAccount).filter(
+                            BankAccount.name.ilike(f"{main_name}%"),
+                            BankAccount.company_id == company_id,
+                            BankAccount.is_active == True
+                        ).first()
+                        
+                        # If still no match, try contains match
+                        if not bank_account:
+                            bank_account = db.query(BankAccount).filter(
+                                BankAccount.name.ilike(f"%{main_name}%"),
+                                BankAccount.company_id == company_id,
+                                BankAccount.is_active == True
+                            ).first()
+                    
                     if bank_account:
                         bank_account_id = bank_account.id
                     else:
-                        errors.append(f"Row {row_num}: Bank account '{row['bank_account_name']}' not found or inactive")
+                        # Get available bank accounts for better error message
+                        available_accounts = db.query(BankAccount).filter(
+                            BankAccount.company_id == company_id,
+                            BankAccount.is_active == True
+                        ).all()
+                        account_names = [acc.name for acc in available_accounts]
+                        errors.append(f"Row {row_num}: Bank account '{bank_account_name}' not found or inactive. Available accounts: {', '.join(account_names)}")
                         continue
                 else:
                     # If no bank account specified, try to find default

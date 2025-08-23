@@ -9,7 +9,11 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.database import Base
 from app.core.config import settings
-from app.models import user, company, customer, transaction, expense
+from app.models import (
+    user, company, customer, transaction, expense, 
+    recurring_income, recurring_expense, one_off_item, 
+    cash_flow_projection, bank_account
+)
 
 config = context.config
 if config.config_file_name is not None:

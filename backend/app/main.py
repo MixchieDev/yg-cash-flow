@@ -1,5 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import logging
 import traceback
 from app.core.config import settings
@@ -16,13 +19,34 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure CORS for both development and production
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000", 
+    "https://frontend-o7n6iojir-mixchies-projects.vercel.app",
+    "https://*.vercel.app",
+    "*",  # Allow all origins
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://localhost:3002", "http://127.0.0.1:3002", "http://localhost:3003", "http://127.0.0.1:3003"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error for {request.method} {request.url}")
+    logger.error(f"Validation errors: {exc.errors()}")
+    logger.error(f"Request body: {exc.body}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -53,3 +77,6 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# For Vercel deployment
+handler = app

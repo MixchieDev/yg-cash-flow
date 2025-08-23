@@ -1,14 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Numeric, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
-import enum
-
-class FrequencyType(str, enum.Enum):
-    WEEKLY = "weekly"
-    MONTHLY = "monthly"
-    QUARTERLY = "quarterly"
-    ANNUALLY = "annually"
 
 class RecurringIncome(Base):
     __tablename__ = "recurring_income"
@@ -18,7 +11,7 @@ class RecurringIncome(Base):
     description = Column(Text)
     amount = Column(Numeric(15, 2), nullable=False)
     vat_amount = Column(Numeric(15, 2), default=0.0)
-    frequency = Column(Enum(FrequencyType), nullable=False)
+    frequency = Column(String, nullable=False)  # weekly, monthly, quarterly, annually
     start_date = Column(DateTime(timezone=True), nullable=False)
     end_date = Column(DateTime(timezone=True))  # Optional, for income streams that end
     day_of_month = Column(Integer)  # For monthly/quarterly (1-31)

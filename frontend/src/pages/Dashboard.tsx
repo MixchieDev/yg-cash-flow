@@ -134,10 +134,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Cash Flow Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">
+    <div className="w-full max-w-none">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="responsive-text-2xl font-bold text-gray-900">Cash Flow Dashboard</h1>
+        <p className="mt-1 responsive-text-sm text-gray-500">
           Overview of your cash flow projections and recurring patterns
         </p>
       </div>
@@ -160,15 +160,15 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700">Select Company</label>
+          <div className="mb-4 sm:mb-6">
+            <label className="block responsive-text-sm font-medium text-gray-700">Select Company</label>
             <select
               value={selectedCompany?.id || ''}
               onChange={(e) => {
                 const company = companies.find(c => c.id === parseInt(e.target.value))
                 setSelectedCompany(company || null)
               }}
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              className="mt-1 block w-full max-w-md pl-3 pr-10 py-2 responsive-text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
             >
               <option value="">Select a company...</option>
               {companies.map((company) => (
@@ -181,22 +181,22 @@ export default function Dashboard() {
 
           {selectedCompany && (
             <>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+              <div className="dashboard-grid mb-6 sm:mb-8">
                 <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
-                        <ArrowTrendingUpIcon className="h-8 w-8 text-green-500" />
+                        <ArrowTrendingUpIcon className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
                       </div>
-                      <div className="ml-5 w-0 flex-1">
+                      <div className="ml-3 sm:ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">
+                          <dt className="responsive-text-sm font-medium text-gray-500 truncate">
                             Active Income Patterns
                           </dt>
-                          <dd className="text-lg font-medium text-gray-900">
+                          <dd className="responsive-text-lg font-medium text-gray-900">
                             {stats.activeIncomePatterns}
                           </dd>
-                          <dd className="text-xs text-gray-500">
+                          <dd className="responsive-text-xs text-gray-500">
                             ~{formatAmount(stats.monthlyIncomeTotal)}/month
                           </dd>
                         </dl>
@@ -206,20 +206,20 @@ export default function Dashboard() {
                 </div>
 
                 <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
-                        <ArrowTrendingDownIcon className="h-8 w-8 text-red-500" />
+                        <ArrowTrendingDownIcon className="h-6 w-6 sm:h-8 sm:w-8 text-red-500" />
                       </div>
-                      <div className="ml-5 w-0 flex-1">
+                      <div className="ml-3 sm:ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">
+                          <dt className="responsive-text-sm font-medium text-gray-500 truncate">
                             Active Expense Patterns
                           </dt>
-                          <dd className="text-lg font-medium text-gray-900">
+                          <dd className="responsive-text-lg font-medium text-gray-900">
                             {stats.activeExpensePatterns}
                           </dd>
-                          <dd className="text-xs text-gray-500">
+                          <dd className="responsive-text-xs text-gray-500">
                             ~{formatAmount(stats.monthlyExpenseTotal)}/month
                           </dd>
                         </dl>
@@ -229,20 +229,20 @@ export default function Dashboard() {
                 </div>
 
                 <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
-                        <ClipboardDocumentListIcon className="h-8 w-8 text-blue-500" />
+                        <ClipboardDocumentListIcon className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
                       </div>
-                      <div className="ml-5 w-0 flex-1">
+                      <div className="ml-3 sm:ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">
+                          <dt className="responsive-text-sm font-medium text-gray-500 truncate">
                             Upcoming One-offs
                           </dt>
-                          <dd className="text-lg font-medium text-gray-900">
+                          <dd className="responsive-text-lg font-medium text-gray-900">
                             {stats.plannedOneOffs}
                           </dd>
-                          <dd className="text-xs text-gray-500">
+                          <dd className="responsive-text-xs text-gray-500">
                             Next 30 days
                           </dd>
                         </dl>
@@ -252,22 +252,22 @@ export default function Dashboard() {
                 </div>
 
                 <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
-                        <CalendarDaysIcon className="h-8 w-8 text-indigo-500" />
+                        <CalendarDaysIcon className="h-6 w-6 sm:h-8 sm:w-8 text-indigo-500" />
                       </div>
-                      <div className="ml-5 w-0 flex-1">
+                      <div className="ml-3 sm:ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">
+                          <dt className="responsive-text-sm font-medium text-gray-500 truncate">
                             Net Monthly Flow
                           </dt>
-                          <dd className={`text-lg font-medium ${
+                          <dd className={`responsive-text-lg font-medium ${
                             (stats.monthlyIncomeTotal - stats.monthlyExpenseTotal) >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
                             {formatAmount(stats.monthlyIncomeTotal - stats.monthlyExpenseTotal)}
                           </dd>
-                          <dd className="text-xs text-gray-500">
+                          <dd className="responsive-text-xs text-gray-500">
                             Projected average
                           </dd>
                         </dl>
@@ -278,9 +278,9 @@ export default function Dashboard() {
               </div>
 
               {/* Quick Actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3 mb-6 sm:mb-8">
+                <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+                  <h3 className="responsive-text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
                   <div className="space-y-3">
                     <Link
                       to="/projections"
@@ -306,8 +306,8 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Upcoming One-off Items</h3>
+                <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+                  <h3 className="responsive-text-lg font-medium text-gray-900 mb-4">Upcoming One-off Items</h3>
                   {getUpcomingItems().length === 0 ? (
                     <p className="text-sm text-gray-500">No upcoming items in the next 30 days</p>
                   ) : (
@@ -331,8 +331,8 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">System Status</h3>
+                <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+                  <h3 className="responsive-text-lg font-medium text-gray-900 mb-4">System Status</h3>
                   <div className="space-y-3">
                     <div className="flex items-center">
                       <div className={`w-3 h-3 rounded-full mr-2 ${

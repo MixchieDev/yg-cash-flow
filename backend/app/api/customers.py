@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 import csv
 import io
+import logging
 from datetime import datetime
 from app.core.database import get_db
 from app.core.auth import get_current_active_user
@@ -12,6 +13,7 @@ from app.models.customer import Customer as CustomerModel
 from app.models.company import Company as CompanyModel
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def verify_company_ownership(db: Session, company_id: int, user_id: int):
     company = db.query(CompanyModel).filter(
@@ -45,12 +47,60 @@ def create_customer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
+    logger.info(f"Creating customer with data: {customer.dict()}")
     verify_company_ownership(db, customer.company_id, current_user.id)
-    db_customer = CustomerModel(**customer.dict())
-    db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
-    return db_customer
+    
+    try:
+        # Convert to dict and handle potential issues
+        customer_data = customer.dict()
+        logger.info(f"Customer data after conversion: {customer_data}")
+        
+        # Validate required fields
+        if not customer_data.get('name', '').strip():
+            logger.error("Customer name validation failed")
+            raise HTTPException(status_code=422, detail="Customer name is required")
+        
+        # Validate payment_terms if provided
+        if customer_data.get('payment_terms') is not None:
+            try:
+                payment_terms = int(customer_data['payment_terms'])
+                if payment_terms < 0:
+                    logger.error(f"Payment terms validation failed: {payment_terms}")
+                    raise HTTPException(status_code=422, detail="Payment terms must be a positive number")
+                customer_data['payment_terms'] = payment_terms
+            except ValueError:
+                logger.error(f"Payment terms type validation failed: {customer_data.get('payment_terms')}")
+                raise HTTPException(status_code=422, detail="Payment terms must be a valid number")
+        
+        # Handle contract_start date validation
+        if customer_data.get('contract_start') is not None:
+            contract_start = customer_data['contract_start']
+            logger.info(f"Processing contract_start: {contract_start}, type: {type(contract_start)}")
+            if isinstance(contract_start, str):
+                try:
+                    customer_data['contract_start'] = parse_date(contract_start)
+                except ValueError as e:
+                    logger.error(f"Contract start date parsing failed: {str(e)}")
+                    raise HTTPException(status_code=422, detail=f"Invalid contract start date: {str(e)}")
+        
+        logger.info(f"Final customer data before DB insert: {customer_data}")
+        db_customer = CustomerModel(**customer_data)
+        db.add(db_customer)
+        db.commit()
+        db.refresh(db_customer)
+        logger.info("Customer created successfully")
+        return db_customer
+        
+    except HTTPException:
+        logger.error("HTTPException caught, re-raising")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error creating customer: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(status_code=422, detail=f"Error creating customer: {str(e)}")
 
 @router.get("/company/{company_id}", response_model=List[Customer])
 def read_customers(
@@ -162,13 +212,44 @@ def update_customer(
     
     verify_company_ownership(db, customer.company_id, current_user.id)
     
-    update_data = customer_update.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(customer, field, value)
-    
-    db.commit()
-    db.refresh(customer)
-    return customer
+    try:
+        update_data = customer_update.dict(exclude_unset=True)
+        
+        # Validate name if being updated
+        if 'name' in update_data and not update_data['name'].strip():
+            raise HTTPException(status_code=422, detail="Customer name cannot be empty")
+        
+        # Validate payment_terms if being updated
+        if 'payment_terms' in update_data and update_data['payment_terms'] is not None:
+            try:
+                payment_terms = int(update_data['payment_terms'])
+                if payment_terms < 0:
+                    raise HTTPException(status_code=422, detail="Payment terms must be a positive number")
+                update_data['payment_terms'] = payment_terms
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Payment terms must be a valid number")
+        
+        # Handle contract_start date validation if being updated
+        if 'contract_start' in update_data and update_data['contract_start'] is not None:
+            contract_start = update_data['contract_start']
+            if isinstance(contract_start, str):
+                try:
+                    update_data['contract_start'] = parse_date(contract_start)
+                except ValueError as e:
+                    raise HTTPException(status_code=422, detail=f"Invalid contract start date: {str(e)}")
+        
+        for field, value in update_data.items():
+            setattr(customer, field, value)
+        
+        db.commit()
+        db.refresh(customer)
+        return customer
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=f"Error updating customer: {str(e)}")
 
 @router.delete("/{customer_id}")
 def delete_customer(
