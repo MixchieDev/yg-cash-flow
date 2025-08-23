@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import traceback
 from app.core.config import settings
@@ -19,18 +20,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS for both development and production
-allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000", 
-    "https://frontend-o7n6iojir-mixchies-projects.vercel.app",
-    "https://*.vercel.app",
-    "*",  # Allow all origins
-]
+# Custom CORS middleware for GitHub Codespaces
+class CORSFixMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Expose-Headers"] = "*"
+        response.headers["Access-Control-Max-Age"] = "3600"
+        return response
 
+app.add_middleware(CORSFixMiddleware)
+
+# Also add standard CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
@@ -38,15 +44,30 @@ app.add_middleware(
     max_age=3600,
 )
 
+# Handle preflight OPTIONS requests
+@app.options("/{full_path:path}")
+async def preflight_handler():
+    response = Response()
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"Validation error for {request.method} {request.url}")
     logger.error(f"Validation errors: {exc.errors()}")
     logger.error(f"Request body: {exc.body}")
-    return JSONResponse(
+    response = JSONResponse(
         status_code=422,
         content={"detail": exc.errors(), "body": exc.body},
     )
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Expose-Headers"] = "*"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    return response
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -56,7 +77,17 @@ async def log_requests(request: Request, call_next):
     except Exception as e:
         logger.error(f"Unhandled exception for {request.method} {request.url}: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise e
+        # Create error response with CORS headers
+        error_response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"}
+        )
+        error_response.headers["Access-Control-Allow-Origin"] = "*"
+        error_response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+        error_response.headers["Access-Control-Allow-Headers"] = "*"
+        error_response.headers["Access-Control-Expose-Headers"] = "*"
+        error_response.headers["Access-Control-Max-Age"] = "3600"
+        return error_response
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
