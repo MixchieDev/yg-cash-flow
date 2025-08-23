@@ -6,11 +6,17 @@ app = "cash-flow-backend"
   PORT = "8080"
 
 [[services]]
-  http_checks = []
   internal_port = 8080
   processes = ["app"]
   protocol = "tcp"
-  script_checks = []
+
+  [[services.http_checks]]
+  interval = "10s"
+  grace_period = "5s"
+  method = "get"
+  path = "/health"
+  protocol = "http"
+  timeout = "2s"
 
   [services.concurrency]
     hard_limit = 25
@@ -25,9 +31,3 @@ app = "cash-flow-backend"
   [[services.ports]]
     handlers = ["tls", "http"]
     port = 443
-
-  [[services.tcp_checks]]
-    grace_period = "1s"
-    interval = "15s"
-    restart_limit = 0
-    timeout = "2s"
