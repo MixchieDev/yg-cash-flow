@@ -81,7 +81,13 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
+
+# Initialize database (for fresh setup)
+python init_database.py
+
+# Apply migrations (if needed)
 alembic upgrade head
+
 uvicorn app.main:app --reload
 ```
 
@@ -105,7 +111,29 @@ FastAPI provides automatic API documentation:
 
 ## Deployment
 
-The application can be deployed using:
-- **Backend**: Docker + PostgreSQL on any cloud provider
+### Railway (Recommended - Free Tier Available)
+
+**Backend Deployment:**
+1. Connect your GitHub repo to Railway
+2. Add a PostgreSQL service to your project
+3. Deploy from the `backend` folder
+4. Railway will automatically:
+   - Install dependencies from `requirements.txt`
+   - Run `init_database.py` to create tables
+   - Apply migrations with `alembic upgrade head`  
+   - Start the server with `uvicorn`
+
+**Frontend Deployment:**
+- Deploy separately from the `frontend` folder
+- Set `VITE_API_URL` to your Railway backend URL
+
+**Environment Variables (Auto-configured):**
+- `DATABASE_URL` - Automatically provided by Railway PostgreSQL
+- `SECRET_KEY` - Set manually in Railway dashboard
+- `PORT` - Automatically set by Railway
+
+### Other Platforms
+
+- **Backend**: Docker + PostgreSQL on any cloud provider  
 - **Frontend**: Static hosting (Vercel, Netlify) or Docker
 - **Database**: Managed PostgreSQL (AWS RDS, Google Cloud SQL)
